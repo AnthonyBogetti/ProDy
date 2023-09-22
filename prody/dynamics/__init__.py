@@ -352,6 +352,10 @@ from . import clustenm
 from .clustenm import *
 __all__.extend(clustenm.__all__)
 
+from . import simplemd
+from .simplemd import *
+__all__.extend(simplemd.__all__)
+
 from . import essa
 from .essa import *
 __all__.extend(essa.__all__)
