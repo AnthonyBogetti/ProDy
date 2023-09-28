@@ -43,8 +43,9 @@ from .imanm import imANM
 from .exanm import exANM
 from .editing import extendModel
 from .sampling import sampleModes
+from .compare import calcOverlap
 from prody.atomic import AtomGroup
-from prody.measure import calcTransformation, applyTransformation, calcRMSD
+from prody.measure import calcTransformation, applyTransformation, calcRMSD, calcDeformVector, superpose
 from prody.ensemble import Ensemble
 from prody.proteins import writePDB, parsePDB, writePDBStream, parsePDBStream
 from prody.utilities import createStringIO, importLA, mad
@@ -110,6 +111,11 @@ class ClustENM(Ensemble):
         self._indexer = None
         self._targeted = False
         self._tmdk = 10.
+
+        self._direct = False                                                                          
+        self._corrCutoff = 0.7
+        self._top_confs = 5
+        self._pdb_target = None
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -520,13 +526,64 @@ class ClustENM(Ensemble):
         if not self._checkANM(anm_cg):
             return None
 
-        anm_cg.calcModes(self._n_modes, turbo=self._turbo)
+        if self._direct:
+            anm_cg.calcModes(self._n_modes, turbo=self._turbo)
+            anm_ex = self._extendModel(anm_cg, cg, tmp)
 
-        anm_ex = self._extendModel(anm_cg, cg, tmp)
-        ens_ex = sampleModes(anm_ex, atoms=tmp,
-                             n_confs=self._n_confs,
-                             rmsd=self._rmsd[self._cycle])
-        coordsets = ens_ex.getCoordsets()
+            initial_ca = tmp.select("name CA")
+            target_ca = parsePDB(self._pdb_target).select("name CA")
+            aligned_initial_ca, T = superpose(initial_ca, target_ca)
+            defvec_initial_target = calcDeformVector(aligned_initial_ca, target_ca)
+
+            overlap = calcOverlap(defvec_initial_target.getNormed(), anm_cg)
+            sorted_idx = np.argsort(abs(overlap))[::-1]
+
+            selected_mode_idx = []
+
+            for idx, val in enumerate(sorted_idx):
+                uptohere = overlap[sorted_idx[:idx+1]]**2
+                cumsum = np.sqrt(np.sum(uptohere))
+                selected_mode_idx.append(val)
+
+                if cumsum > self._corrCutoff:
+                    break
+
+            LOGGER.info("%s mode(s) (cumcorr=%s) were selected for sampling"%(len(selected_mode_idx), cumsum))
+            ens_ex = sampleModes(anm_ex[selected_mode_idx], atoms=tmp,
+                                 n_confs=self._n_confs,
+                                 rmsd=self._rmsd[self._cycle])
+
+            coordsets = ens_ex.getCoordsets()
+
+            conf_overlaps = []
+            conf_rmsds = []
+                                                                                       
+            for conf in coordsets:
+                conf_ca = conf[self._idx_cg]
+                                                                                        
+                aligned_initial, T = superpose(initial_ca, conf_ca)
+                defvec_initial_conf = calcDeformVector(aligned_initial, conf_ca)
+                aligned_conf, T = superpose(conf_ca, target_ca)
+                defvec_conf_target = calcDeformVector(aligned_conf, target_ca)
+                                                                                        
+#                conf_overlaps.append(abs(calcOverlap(defvec_initial_conf.getNormed(), 
+#                                                 defvec_conf_target.getNormed())))
+                conf_overlaps.append(calcOverlap(defvec_initial_conf.getNormed(), 
+                                                 defvec_conf_target.getNormed()))
+
+                conf_rmsds.append(calcRMSD(aligned_initial_ca, target_ca))
+
+        else:
+            anm_cg.calcModes(self._n_modes, turbo=self._turbo)
+            anm_ex = self._extendModel(anm_cg, cg, tmp)
+
+            ens_ex = sampleModes(anm_ex, atoms=tmp,
+                                 n_confs=self._n_confs,
+                                 rmsd=self._rmsd[self._cycle])
+
+            coordsets = ens_ex.getCoordsets()
+            conf_overlaps = np.zeros(len(coordsets))
+            conf_rmsds = np.zeros(len(coordsets))
 
         if self._targeted:
             if self._parallel:
@@ -543,7 +600,7 @@ class ClustENM(Ensemble):
 
             LOGGER.debug('%d/%d sets of coordinates were moved to the target' % (len(poses), len(coordsets)))
 
-        return coordsets
+        return coordsets, np.array(conf_overlaps), np.array(conf_rmsds)
 
     def _rmsds(self, coords):
 
@@ -619,19 +676,27 @@ class ClustENM(Ensemble):
         else:
             tmp = [sample_method(conf) for conf in confs]
 
-        tmp = [r for r in tmp if r is not None]
+        confs_ex = np.array([r for r in tmp[0][0] if r is not None])
 
-        confs_ex = np.concatenate(tmp)
+        if self._direct:
+            correlations = tmp[0][1]
+            rmsds = tmp[0][2]
+            top_correlations_idx = np.argsort(correlations)[::-1][:self._top_confs]
+            LOGGER.info("Conformations %s are chosen to continue"%top_correlations_idx)
+            LOGGER.info("Having correlations %s"%correlations[top_correlations_idx])
+            LOGGER.info("And having RMSDs %s"%rmsds[top_correlations_idx])
+            
+            return confs_ex[top_correlations_idx], confs_ex, np.zeros(self._top_confs)
 
-        confs_cg = confs_ex[:, self._idx_cg]
+        else:
+            confs_cg = confs_ex[:, self._idx_cg]
+            LOGGER.info('Clustering in generation %d ...' % self._cycle)
+            label_cg = self._hc(confs_cg)
+            centers, wei = self._centers(confs_cg, label_cg)
+            LOGGER.report('Centroids were generated in %.2fs.',
+                          label='_clustenm_gen')
 
-        LOGGER.info('Clustering in generation %d ...' % self._cycle)
-        label_cg = self._hc(confs_cg)
-        centers, wei = self._centers(confs_cg, label_cg)
-        LOGGER.report('Centroids were generated in %.2fs.',
-                      label='_clustenm_gen')
-
-        return confs_ex[centers], wei
+            return confs_ex[centers], confs_ex, wei
 
     def _outliers(self, arg):
 
@@ -874,7 +939,8 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, **kwargs):
+            outlier=True, mzscore=3.5, 
+            direct=False, top_confs=5, corrCutoff=0.7, pdb_target=None, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1049,6 +1115,11 @@ class ClustENM(Ensemble):
         self._mzscore = mzscore
         self._v1 = kwargs.pop('v1', False)
 
+        self._direct = direct
+        self._top_confs = top_confs
+        self._corrCutoff = corrCutoff
+        self._pdb_target = pdb_target
+
         self._cycle = 0
 
         # check for discontinuity in the structure
@@ -1090,11 +1161,12 @@ class ClustENM(Ensemble):
         conf = conformer.reshape(new_shape)
         conformers = start_confs = conf
         keys = [(0, 0)]
+        allkeys = [(0, 0)]
 
         for i in range(1, self._n_gens+1):
             self._cycle += 1
             LOGGER.info('Generation %d ...' % i)
-            confs, weights = self._generate(start_confs)
+            confs, allconfs, weights = self._generate(start_confs)
             if self._sim:
                 if self._t_steps[i] != 0:
                     LOGGER.info('Minimization, heating-up & simulation in generation %d ...' % i)
@@ -1124,15 +1196,22 @@ class ClustENM(Ensemble):
             sizes.extend(weights[idx])
             potentials.extend(pots[idx])
             start_confs = self._superpose_cg(confs[idx])
+            all_confs = self._superpose_cg(allconfs)
 
             for j in range(start_confs.shape[0]):
                 keys.append((i, j))
+
+            for j in range(all_confs.shape[0]):
+                allkeys.append((i, j))
+
             conformers = np.vstack((conformers, start_confs))
+#            allconformers = np.vstack((allconformers, all_confs))
 
         LOGGER.timeit('_clustenm_ens')
         LOGGER.info('Creating an ensemble of conformers ...')
 
         self._build(conformers, keys, potentials, sizes)
+#        self.copy()._build(allconformers, allkeys, np.zeros(all_confs.shape[0]), np.zeros(all_confs.shape[0]))
         LOGGER.report('Ensemble was created in %.2fs.', label='_clustenm_ens')
 
         self._time = LOGGER.timing(label='_clustenm_overall')
