@@ -117,6 +117,7 @@ class ClustENM(Ensemble):
         self._corrCutoff = 0.7
         self._top_confs = 5
         self._pdb_target = None
+        self._save_all = False
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -941,7 +942,8 @@ class ClustENM(Ensemble):
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
             outlier=True, mzscore=3.5, 
-            direct=False, top_confs=5, corrCutoff=0.7, pdb_target=None, **kwargs):
+            direct=False, top_confs=5, corrCutoff=0.7, 
+            pdb_target=None, save_all=False, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1120,6 +1122,7 @@ class ClustENM(Ensemble):
         self._top_confs = top_confs
         self._corrCutoff = corrCutoff
         self._pdb_target = pdb_target
+        self._save_all = save_all
 
         self._cycle = 0
 
@@ -1206,8 +1209,9 @@ class ClustENM(Ensemble):
             allconformers = np.vstack((allconformers, all_confs))
 
         all_ens = Ensemble()
-        all_ens.addCoordset(allconfs)
-        writeDCD("all_confs.dcd", all_ens)
+        all_ens.addCoordset(allconformers)
+        if self._save_all:
+            writeDCD("all_confs.dcd", all_ens)
 
         LOGGER.timeit('_clustenm_ens')
         LOGGER.info('Creating an ensemble of conformers ...')
