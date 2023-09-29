@@ -49,6 +49,7 @@ from prody.measure import calcTransformation, applyTransformation, calcRMSD, cal
 from prody.ensemble import Ensemble
 from prody.proteins import writePDB, parsePDB, writePDBStream, parsePDBStream
 from prody.utilities import createStringIO, importLA, mad
+from prody.trajectory import writeDCD
 
 la = importLA()
 norm = la.norm
@@ -1160,8 +1161,8 @@ class ClustENM(Ensemble):
             new_shape.append(s)
         conf = conformer.reshape(new_shape)
         conformers = start_confs = conf
+        allconformers = start_confs = conf
         keys = [(0, 0)]
-        allkeys = [(0, 0)]
 
         for i in range(1, self._n_gens+1):
             self._cycle += 1
@@ -1201,17 +1202,17 @@ class ClustENM(Ensemble):
             for j in range(start_confs.shape[0]):
                 keys.append((i, j))
 
-            for j in range(all_confs.shape[0]):
-                allkeys.append((i, j))
-
             conformers = np.vstack((conformers, start_confs))
-#            allconformers = np.vstack((allconformers, all_confs))
+            allconformers = np.vstack((allconformers, all_confs))
+
+        all_ens = Ensemble()
+        all_ens.addCoordset(allconfs)
+        writeDCD("all_confs.dcd", all_ens)
 
         LOGGER.timeit('_clustenm_ens')
         LOGGER.info('Creating an ensemble of conformers ...')
 
         self._build(conformers, keys, potentials, sizes)
-#        self.copy()._build(allconformers, allkeys, np.zeros(all_confs.shape[0]), np.zeros(all_confs.shape[0]))
         LOGGER.report('Ensemble was created in %.2fs.', label='_clustenm_ens')
 
         self._time = LOGGER.timing(label='_clustenm_overall')
