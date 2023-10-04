@@ -541,16 +541,20 @@ class ClustENM(Ensemble):
             sorted_idx = np.argsort(abs(overlap))[::-1]
 
             selected_mode_idx = []
+            cumsums = []
 
             for idx, val in enumerate(sorted_idx):
                 uptohere = overlap[sorted_idx[:idx+1]]**2
                 cumsum = np.sqrt(np.sum(uptohere))
                 selected_mode_idx.append(val)
+                cumsums.append(cumsum)
 
                 if cumsum > self._corrCutoff:
                     break
 
             LOGGER.info("%s mode(s) (cumcorr=%s) were selected for sampling"%(len(selected_mode_idx), cumsum))
+            LOGGER.info("MODES: %s"%selected_mode_idx)
+            LOGGER.info("CUMSUM: %s"%cumsums)
             ens_ex = sampleModes(anm_ex[selected_mode_idx], atoms=tmp,
                                  n_confs=self._n_confs,
                                  rmsd=self._rmsd[self._cycle])
