@@ -48,6 +48,7 @@ from prody.measure import calcTransformation, applyTransformation, calcRMSD
 from prody.ensemble import Ensemble
 from prody.proteins import writePDB, parsePDB, writePDBStream, parsePDBStream
 from prody.utilities import createStringIO, importLA, mad
+from prody.trajectory import writeDCD
 
 la = importLA()
 norm = la.norm
@@ -110,6 +111,8 @@ class ClustENM(Ensemble):
         self._indexer = None
         self._targeted = False
         self._tmdk = 10.
+
+        self.save_all = False
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -631,7 +634,7 @@ class ClustENM(Ensemble):
         LOGGER.report('Centroids were generated in %.2fs.',
                       label='_clustenm_gen')
 
-        return confs_ex[centers], wei
+        return confs_ex[centers], confs_ex, wei
 
     def _outliers(self, arg):
 
@@ -874,7 +877,7 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, **kwargs):
+            outlier=True, mzscore=3.5, save_all=False, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1049,6 +1052,8 @@ class ClustENM(Ensemble):
         self._mzscore = mzscore
         self._v1 = kwargs.pop('v1', False)
 
+        self.save_all = save_all
+
         self._cycle = 0
 
         # check for discontinuity in the structure
@@ -1089,12 +1094,13 @@ class ClustENM(Ensemble):
             new_shape.append(s)
         conf = conformer.reshape(new_shape)
         conformers = start_confs = conf
+        allconformers = start_confs = conf
         keys = [(0, 0)]
 
         for i in range(1, self._n_gens+1):
             self._cycle += 1
             LOGGER.info('Generation %d ...' % i)
-            confs, weights = self._generate(start_confs)
+            confs, allconfs, weights = self._generate(start_confs)
             if self._sim:
                 if self._t_steps[i] != 0:
                     LOGGER.info('Minimization, heating-up & simulation in generation %d ...' % i)
@@ -1124,10 +1130,17 @@ class ClustENM(Ensemble):
             sizes.extend(weights[idx])
             potentials.extend(pots[idx])
             start_confs = self._superpose_cg(confs[idx])
+            all_confs = self._superpose_cg(allconfs)
 
             for j in range(start_confs.shape[0]):
                 keys.append((i, j))
             conformers = np.vstack((conformers, start_confs))
+            allconformers = np.vstack((allconformers, all_confs))
+
+        all_ens = Ensemble()
+        all_ens.addCoordset(allconformers)
+        if self._save_all:
+            writeDCD("all_confs.dcd", all_ens)
 
         LOGGER.timeit('_clustenm_ens')
         LOGGER.info('Creating an ensemble of conformers ...')
