@@ -30,7 +30,7 @@ class SimpleMD():
     def _fix(self):
 
         LOGGER.info("Fixing the structure.")
-        parsePDB(self._pdbname, compressed=False)
+        parsePDB(self._pdbname+".pdb", compressed=False)
         fixed = PDBFixer(self._pdbname+".pdb")
         fixed.missingResidues = {}
         fixed.findNonstandardResidues()
