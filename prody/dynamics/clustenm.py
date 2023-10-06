@@ -112,7 +112,7 @@ class ClustENM(Ensemble):
         self._targeted = False
         self._tmdk = 10.
 
-        self.save_all = False
+        self._save_all = False
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -1052,7 +1052,7 @@ class ClustENM(Ensemble):
         self._mzscore = mzscore
         self._v1 = kwargs.pop('v1', False)
 
-        self.save_all = save_all
+        self._save_all = save_all
 
         self._cycle = 0
 
