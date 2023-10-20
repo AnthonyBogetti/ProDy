@@ -118,6 +118,7 @@ class ClustENM(Ensemble):
         self._top_confs = 5
         self._pdb_target = None
         self._save_all = False
+        self._irelax = False
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -345,7 +346,13 @@ class ClustENM(Ensemble):
                     ke = simulation.context.getState(getEnergy=True).getKineticEnergy()
                     temp = (2 * ke / (sdr._dof * MOLAR_GAS_CONSTANT_R)).value_in_unit(kelvin)
 
-                simulation.step(self._t_steps[self._cycle])
+                if self._cycle == 0:
+                    if self._irelax:
+                        simulation.step(500000) # 1 ns initial relaxation
+                    else:
+                        simulation.step(self._t_steps[self._cycle])
+                else:
+                    simulation.step(self._t_steps[self._cycle])
 
             pos = simulation.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(angstrom)[:self._topology.getNumAtoms()]
             pot = simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
@@ -947,7 +954,7 @@ class ClustENM(Ensemble):
             t_steps_i=1000, t_steps_g=7500,
             outlier=True, mzscore=3.5, 
             direct=False, top_confs=5, corrCutoff=0.7, 
-            pdb_target=None, save_all=False, **kwargs):
+            pdb_target=None, save_all=False, irelax=False, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1127,6 +1134,7 @@ class ClustENM(Ensemble):
         self._corrCutoff = corrCutoff
         self._pdb_target = pdb_target
         self._save_all = save_all
+        self._irelax = irelax
 
         self._cycle = 0
 
@@ -1146,6 +1154,8 @@ class ClustENM(Ensemble):
         if self._sim:
             if self._t_steps[0] != 0:
                 LOGGER.info('Minimization, heating-up & simulation in generation 0 ...')
+                if self._irelax:
+                    LOGGER.info('Running an initial 1 ns relaxation ...')
             else:
                 LOGGER.info('Minimization & heating-up in generation 0 ...')
         else:
