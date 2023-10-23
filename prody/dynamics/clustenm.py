@@ -73,6 +73,7 @@ class ClustENM(Ensemble):
     def __init__(self, title=None):
 
         self._atoms = None
+        self._target = None
         self._nuc = None
         self._ph = 7.0
 
@@ -191,6 +192,17 @@ class ClustENM(Ensemble):
             self._n_atoms = self._atoms.numAtoms()
             self._indices = None
 
+    def setTarget(self, atoms, pH=7.0):
+
+        atoms = atoms.select('not hetatm')
+
+        LOGGER.info('Fixing the target structure ...')
+        LOGGER.timeit('_clustenm_fix')
+        self._ph = pH
+        self._fix(atoms, target=True)
+        LOGGER.report('The target structure was fixed in %.2fs.',
+                      label='_clustenm_fix')
+
     def getTitle(self):
 
         'Returns the title.'
@@ -218,7 +230,7 @@ class ClustENM(Ensemble):
             raise TypeError('title must be either str or None')
         self._title = title
 
-    def _fix(self, atoms):
+    def _fix(self, atoms, target=False):
 
         try:
             from pdbfixer import PDBFixer
@@ -245,12 +257,18 @@ class ClustENM(Ensemble):
         PDBFile.writeFile(fixed.topology, fixed.positions,
                           stream, keepIds=True)
         stream.seek(0)
-        self._atoms = parsePDBStream(stream)
-        self._atoms.setTitle(title)
-        stream.close()
 
-        self._topology = fixed.topology
-        self._positions = fixed.positions
+        if target:
+            self._target = parsePDBStream(stream)
+            self._target.setTitle(title)
+            stream.close()
+        else:
+            self._atoms = parsePDBStream(stream)
+            self._atoms.setTitle(title)
+            stream.close()
+
+            self._topology = fixed.topology
+            self._positions = fixed.positions
 
     def _prep_sim(self, coords, external_forces=[]):
 
@@ -529,6 +547,8 @@ class ClustENM(Ensemble):
         tmp = self._atoms.copy()
         tmp.setCoords(conf)
         cg = tmp[self._idx_cg]
+        tmp_target = self._target.copy()
+        target_ca = tmp_target.select("name CA")
 
         anm_cg = self._buildANM(cg)
 
@@ -540,7 +560,7 @@ class ClustENM(Ensemble):
             anm_ex = self._extendModel(anm_cg, cg, tmp)
 
             initial_ca = tmp.select("name CA")
-            target_ca = parsePDB(self._pdb_target).select("name CA")
+            #target_ca = parsePDB(self._pdb_target).select("name CA")
             aligned_initial_ca, T = superpose(initial_ca, target_ca)
             defvec_initial_target = calcDeformVector(aligned_initial_ca, target_ca)
 
@@ -1170,6 +1190,11 @@ class ClustENM(Ensemble):
         LOGGER.info('#' + '-' * 19 + '/*\\' + '-' * 19 + '#')
 
         self.setCoords(conformer)
+
+        if irelax:
+            LOGGER.info('Relaxing the target structure...')
+            target_potential, target_conformer = self._min_sim(self._target.getCoords())
+            self._target.setCoords(target_conformer)
 
         potentials = [potential]
         sizes = [1]
