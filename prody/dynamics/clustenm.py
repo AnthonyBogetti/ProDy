@@ -547,15 +547,14 @@ class ClustENM(Ensemble):
         tmp = self._atoms.copy()
         tmp.setCoords(conf)
         cg = tmp[self._idx_cg]
-        tmp_target = self._target.copy()
-        target_ca = tmp_target.select("name CA")
-
         anm_cg = self._buildANM(cg)
 
         if not self._checkANM(anm_cg):
             return None
 
         if self._direct:
+            tmp_target = self._target.copy()
+            target_ca = tmp_target.select("name CA")
             anm_cg.calcModes(self._n_modes, turbo=self._turbo)
             anm_ex = self._extendModel(anm_cg, cg, tmp)
 
