@@ -754,6 +754,8 @@ class ClustENM(Ensemble):
     def _build(self, conformers, keys, potentials, sizes):
 
         self.addCoordset(conformers)
+        if self._direct:
+            self.addCoordset(self._target)
         self.setData('size', sizes)
         self.setData('key', keys)
         self.setData('potential', potentials)
