@@ -1133,6 +1133,7 @@ class ClustENM(Ensemble):
             self._force_field = ('amber99sbildn.xml', 'amber99_obc.xml') if force_field is None else force_field
         if self._sol == 'exp':
             self._force_field = ('amber14-all.xml', 'amber14/tip3pfb.xml') if force_field is None else force_field
+        LOGGER.info(self._force_field)
         self._tolerance = kwargs.pop('tolerance', 10.0)
         self._maxIterations = kwargs.pop('maxIterations', 0)
         self._sim = sim
