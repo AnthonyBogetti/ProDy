@@ -352,6 +352,51 @@ class ClustENM(Ensemble):
 
             return np.nan, np.full_like(coords, np.nan)
 
+    def _min_sim_short(self, coords):
+
+        # coords: coordset   (numAtoms, 3) in Angstrom, which should be converted into nanometer
+
+        try:
+            from openmm.app import StateDataReporter
+            from openmm.unit import kelvin, angstrom, kilojoule_per_mole, MOLAR_GAS_CONSTANT_R
+        except ImportError:
+            raise ImportError('Please install PDBFixer and OpenMM 7.6 in order to use ClustENM.')
+
+        simulation = self._prep_sim(coords=coords)
+
+        # automatic conversion into nanometer will be carried out.
+        # simulation.context.setPositions(coords * angstrom)
+
+        try:
+            simulation.minimizeEnergy(maxIterations=1)
+            if self._sim:
+                # heating-up the system incrementally
+                sdr = StateDataReporter(stdout, 1, step=True, temperature=True)
+                sdr._initializeConstants(simulation)
+                temp = 0.0
+
+                # instantaneous temperature could be obtained by openmmtools module
+                # but its installation using conda may lead to problem due to repository freezing,
+                # therefore, we are here evaluating it by hand.
+
+                while temp < self._temp:
+                    simulation.step(1)
+                    ke = simulation.context.getState(getEnergy=True).getKineticEnergy()
+                    temp = (2 * ke / (sdr._dof * MOLAR_GAS_CONSTANT_R)).value_in_unit(kelvin)
+
+                simulation.step(self._t_steps[self._cycle])
+
+            pos = simulation.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(angstrom)[:self._topology.getNumAtoms()]
+            pot = simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+
+            return pot
+
+        except BaseException as be:
+            LOGGER.warning('OpenMM exception: ' + be.__str__() + ' so the corresponding conformer will be discarded!')
+
+            return np.nan
+
+
     def _targeted_sim(self, coords0, coords1, tmdk=15., d_steps=100, n_max_steps=10000, ddtol=1e-3, n_conv=5):
 
         try:
@@ -626,13 +671,27 @@ class ClustENM(Ensemble):
 
         confs_ex = np.concatenate(tmp)
 
+        pot = np.array([self._min_sim_short(conf) for conf in confs_ex])
+        LOGGER.info('Conf potential energy: %s' % pot)
+
         confs_cg = confs_ex[:, self._idx_cg]
 
         LOGGER.info('Clustering in generation %d ...' % self._cycle)
         label_cg = self._hc(confs_cg)
-        centers, wei = self._centers(confs_cg, label_cg)
-        LOGGER.report('Centroids were generated in %.2fs.',
-                      label='_clustenm_gen')
+        LOGGER.info('Cluster labels: %s' % label_cg)
+
+        centers = []
+        for i in np.unique(label_cg):
+            where = np.where(label_cg==i)[0]
+            sel_ene = pot[where]
+            sel_conf = where[np.argmin(sel_ene)]
+            centers.append(sel_conf)
+
+        wei = np.zeros((len(centers)))
+            
+        #centers, wei = self._centers(confs_cg, label_cg)
+        #LOGGER.report('Centroids were generated in %.2fs.',
+        #              label='_clustenm_gen')
 
         return confs_ex[centers], confs_ex, wei
 
