@@ -638,7 +638,15 @@ class ClustENM(Ensemble):
 
         confs_ex = np.concatenate(tmp)
 
-        pot_tmp = np.array([self._get_energy(conf) for conf in confs_ex])
+        get_energy = self._get_energy
+                                                                      
+        if self._parallel:
+            with Pool(cpu_count()) as p:
+                pot_tmp = p.map(get_energy, [conf for conf in confs_ex])
+        else:
+            pot_tmp = [get_energy(conf) for conf in confs_ex]
+
+        #pot_tmp = np.array([self._get_energy(conf) for conf in confs_ex])
         LOGGER.info('Conf potential energy: %s' % pot_tmp)
 
         confs_cg = confs_ex[:, self._idx_cg]
