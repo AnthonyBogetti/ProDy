@@ -113,6 +113,7 @@ class ClustENM(Ensemble):
         self._tmdk = 10.
 
         self._save_all = False
+        self._min_length = 1
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -368,7 +369,7 @@ class ClustENM(Ensemble):
         # simulation.context.setPositions(coords * angstrom)
 
         try:
-            simulation.minimizeEnergy(maxIterations=10)
+            simulation.minimizeEnergy(maxIterations=self._min_length)
             if self._sim:
                 # heating-up the system incrementally
                 sdr = StateDataReporter(stdout, 1, step=True, temperature=True)
@@ -671,8 +672,18 @@ class ClustENM(Ensemble):
 
         confs_ex = np.concatenate(tmp)
 
-        pot = np.array([self._min_sim_short(conf) for conf in confs_ex])
-        LOGGER.info('Conf potential energy: %s' % pot)
+        min_func = self._min_sim_short
+
+        if self._parallel:
+            with Pool(cpu_count()) as p:
+                pot_tmp = p.map(min_func, [conf for conf in confs_ex])
+        else:
+            pot_tmp = [min_func(conf) for conf in confs_ex]
+
+        pot_tmp = np.array(pot_tmp)
+
+        #pot = np.array([self._min_sim_short(conf, self.min_length) for conf in confs_ex])
+        LOGGER.info('Conf potential energy: %s' % pot_tmp)
 
         confs_cg = confs_ex[:, self._idx_cg]
 
@@ -683,7 +694,7 @@ class ClustENM(Ensemble):
         centers = []
         for i in np.unique(label_cg):
             where = np.where(label_cg==i)[0]
-            sel_ene = pot[where]
+            sel_ene = pot_tmp[where]
             sel_conf = where[np.argmin(sel_ene)]
             centers.append(sel_conf)
 
@@ -936,7 +947,7 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, save_all=False, **kwargs):
+            outlier=True, mzscore=3.5, save_all=False, min_length=1, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1112,6 +1123,7 @@ class ClustENM(Ensemble):
         self._v1 = kwargs.pop('v1', False)
 
         self._save_all = save_all
+        self._min_length = min_length
 
         self._cycle = 0
 
