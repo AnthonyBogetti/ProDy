@@ -641,13 +641,11 @@ class ClustENM(Ensemble):
         confs_ex = np.concatenate(tmp)
 
         pot_tmp = np.array([self._get_energy(conf) for conf in confs_ex])
-        LOGGER.info('Conf potential energy: %s' % pot_tmp)
 
         confs_cg = confs_ex[:, self._idx_cg]
 
         LOGGER.info('Clustering in generation %d ...' % self._cycle)
         label_cg = self._hc(confs_cg)
-        LOGGER.info('Cluster labels: %s' % label_cg)
 
         centers = []
         for i in np.unique(label_cg):
