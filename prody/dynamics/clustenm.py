@@ -308,6 +308,65 @@ class ClustENM(Ensemble):
 
         return simulation
 
+
+    def _prep_sim_energy(self, coords, external_forces=[]):
+
+        try:
+            from openmm import Platform, LangevinIntegrator, Vec3
+            from openmm.app import Modeller, ForceField, \
+                CutoffNonPeriodic, PME, Simulation, HBonds
+            from openmm.unit import angstrom, nanometers, picosecond, \
+                kelvin, Quantity, molar
+        except ImportError:
+            raise ImportError('Please install PDBFixer and OpenMM 7.6 in order to use ClustENM.')
+
+        positions = Quantity([Vec3(*xyz) for xyz in coords], angstrom)
+        modeller = Modeller(self._topology, positions)
+
+        if self._sol == 'imp':
+            forcefield = ForceField(*self._force_field)
+
+            system = forcefield.createSystem(modeller.topology,
+                                             nonbondedMethod=CutoffNonPeriodic,
+                                             nonbondedCutoff=1.0*nanometers,
+                                             constraints=HBonds)
+
+        if self._sol == 'exp':
+            forcefield = ForceField(*self._force_field)
+
+            if self._boxSize:
+                modeller.addSolvent(forcefield,
+                                    ionicStrength=self._ionicStrength*molar,
+                                    boxSize=self._boxSize*nanometers)
+            else:
+                modeller.addSolvent(forcefield,
+                                    padding=self._padding*nanometers,
+                                    ionicStrength=self._ionicStrength*molar)
+
+            system = forcefield.createSystem(modeller.topology,
+                                             nonbondedMethod=PME,
+                                             nonbondedCutoff=1.0*nanometers,
+                                             constraints=HBonds)
+
+        for force in external_forces:
+            system.addForce(force)
+
+        integrator = LangevinIntegrator(self._temp*kelvin,
+                                        1/picosecond,
+                                        0.002*picosecond)
+
+        # precision could be mixed, but single is okay.
+        platform = 'CPU'
+        properties = None
+
+        simulation = Simulation(modeller.topology, system, integrator,
+                                platform, properties)
+
+        simulation.context.setPositions(modeller.positions)
+
+        return simulation
+
+
     def _min_sim(self, coords):
 
         # coords: coordset   (numAtoms, 3) in Angstrom, which should be converted into nanometer
@@ -360,7 +419,7 @@ class ClustENM(Ensemble):
         except ImportError:
             raise ImportError('Please install PDBFixer and OpenMM 7.6 in order to use ClustENM.')
 
-        simulation = self._prep_sim(coords=coords)
+        simulation = self._prep_sim_energy(coords=coords)
 
         return simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
 
