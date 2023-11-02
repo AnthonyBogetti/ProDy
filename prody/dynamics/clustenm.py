@@ -113,7 +113,6 @@ class ClustENM(Ensemble):
         self._tmdk = 10.
 
         self._save_all = False
-        self._min_length = 1
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -353,9 +352,7 @@ class ClustENM(Ensemble):
 
             return np.nan, np.full_like(coords, np.nan)
 
-    def _min_sim_short(self, coords):
-
-        # coords: coordset   (numAtoms, 3) in Angstrom, which should be converted into nanometer
+    def _get_energy(self, coords):
 
         try:
             from openmm.app import StateDataReporter
@@ -365,38 +362,7 @@ class ClustENM(Ensemble):
 
         simulation = self._prep_sim(coords=coords)
 
-        # automatic conversion into nanometer will be carried out.
-        # simulation.context.setPositions(coords * angstrom)
-
-        try:
-            simulation.minimizeEnergy(maxIterations=self._min_length)
-            if self._sim:
-                # heating-up the system incrementally
-                sdr = StateDataReporter(stdout, 1, step=True, temperature=True)
-                sdr._initializeConstants(simulation)
-                temp = 0.0
-
-                # instantaneous temperature could be obtained by openmmtools module
-                # but its installation using conda may lead to problem due to repository freezing,
-                # therefore, we are here evaluating it by hand.
-
-                while temp < self._temp:
-                    simulation.step(1)
-                    ke = simulation.context.getState(getEnergy=True).getKineticEnergy()
-                    temp = (2 * ke / (sdr._dof * MOLAR_GAS_CONSTANT_R)).value_in_unit(kelvin)
-
-                simulation.step(self._t_steps[self._cycle])
-
-            pos = simulation.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(angstrom)[:self._topology.getNumAtoms()]
-            pot = simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
-
-            return pot
-
-        except BaseException as be:
-            LOGGER.warning('OpenMM exception: ' + be.__str__() + ' so the corresponding conformer will be discarded!')
-
-            return np.nan
-
+        return simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
 
     def _targeted_sim(self, coords0, coords1, tmdk=15., d_steps=100, n_max_steps=10000, ddtol=1e-3, n_conv=5):
 
@@ -672,17 +638,7 @@ class ClustENM(Ensemble):
 
         confs_ex = np.concatenate(tmp)
 
-        min_func = self._min_sim_short
-
-        if self._parallel:
-            with Pool(cpu_count()) as p:
-                pot_tmp = p.map(min_func, [conf for conf in confs_ex])
-        else:
-            pot_tmp = [min_func(conf) for conf in confs_ex]
-
-        pot_tmp = np.array(pot_tmp)
-
-        #pot = np.array([self._min_sim_short(conf, self.min_length) for conf in confs_ex])
+        pot_tmp = np.array([self._get_energy(conf) for conf in confs_ex])
         LOGGER.info('Conf potential energy: %s' % pot_tmp)
 
         confs_cg = confs_ex[:, self._idx_cg]
@@ -947,7 +903,7 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, save_all=False, min_length=1, **kwargs):
+            outlier=True, mzscore=3.5, save_all=False, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1123,7 +1079,6 @@ class ClustENM(Ensemble):
         self._v1 = kwargs.pop('v1', False)
 
         self._save_all = save_all
-        self._min_length = min_length
 
         self._cycle = 0
 
