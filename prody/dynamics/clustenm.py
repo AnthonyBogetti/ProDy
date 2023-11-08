@@ -28,8 +28,10 @@ from itertools import product
 from multiprocessing import cpu_count, Pool
 from collections import OrderedDict
 from os import chdir, mkdir
-from os.path import isdir
+from os.path import isdir, exists
+import shutil
 from sys import stdout
+import math
 
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
@@ -49,6 +51,12 @@ from prody.ensemble import Ensemble
 from prody.proteins import writePDB, parsePDB, writePDBStream, parsePDBStream
 from prody.utilities import createStringIO, importLA, mad
 from prody.trajectory import writeDCD
+from mdlearn.data.preprocess.align import iterative_means_align
+from mdlearn.data.preprocess.decorrelation.spatial import SD2
+from mdlearn.data.preprocess.decorrelation.spatial import SD4
+from mdlearn.nn.models.ae.linear import LinearAETrainer
+from sklearn.neighbors import LocalOutlierFactor
+from pathlib import Path
 
 la = importLA()
 norm = la.norm
@@ -113,6 +121,10 @@ class ClustENM(Ensemble):
         self._tmdk = 10.
 
         self._save_all = False
+        self._allconformers = None
+        self._trainer = None
+        self._train_every = 10
+        self._device = None
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -609,6 +621,84 @@ class ClustENM(Ensemble):
 
         return centers, wei
 
+    def _preprocess_data(self, arg):
+                                                                             
+        arg = np.transpose(arg, [0, 2, 1])
+
+        itr, avg_coords, e_rmsd, coords = iterative_means_align(
+        arg, eps=0.001, max_iter=10, num_workers=30, verbose=True
+        )
+
+        Y, S, B, U = SD2(coords.reshape(-1, arg.shape[2]
+        *3), m=arg.shape[2]
+        *3, verbose=True)
+
+        W = SD4(Y[0:60,:], m=60, U=U[0:60,:], verbose=True)
+
+        coordsAll = np.reshape(coords, (len(coords), coords.shape[1] * coords.shape[2])).T
+        avgCoordsAll = np.mean(coordsAll, 1)
+        tmpAll = np.reshape(np.tile(avgCoordsAll, coords.shape[0]), 
+                           (coords.shape[0], coords.shape[1] * coords.shape[2])).T
+        caDevsMDall = coordsAll - tmpAll
+       
+        ZPrj4 = W.dot(caDevsMDall)
+        
+        X = ZPrj4.T
+        np.save("SD4_%s.npy"%self._cycle, X)
+        np.save("e_rmsd_%s.npy"%self._cycle, e_rmsd)
+
+        return X, e_rmsd
+
+    def _train_model(self, X, e_rmsd):
+
+        # Find batch size
+        data_size = X.shape[0]
+        p = int(math.log((data_size), 2))
+        new_batch_size = int(pow(2,p)/8)
+        if new_batch_size > 128:
+            new_batch_size=128
+        LOGGER.info('Using a batch size of %s to train.'%new_batch_size)
+    
+        # Use an autoencoder to model the nonlinear portions
+        trainer = LinearAETrainer(
+        input_dim=60,
+        latent_dim=8,
+        hidden_neurons=[32, 16],
+        epochs=500,
+        verbose=True,
+        checkpoint_log_every=500,
+        plot_method=None,
+        device=self._device,
+        prefetch_factor=None,
+        batch_size=new_batch_size,
+        )
+       
+        scalars = {"rmsd": e_rmsd[-1]} 
+        output_path = Path("test")
+
+        if exists(output_path):
+            shutil.rmtree(output_path)
+
+        trainer.fit(X, scalars, output_path)
+
+        return trainer
+
+    def _predict(self, X, trainer):
+    
+        z, loss = trainer.predict(X)
+        np.save("z_%s.npy"%self._cycle, z)
+
+        return z
+
+    def _select_outliers(self, z):
+        clf = LocalOutlierFactor(n_neighbors=20).fit(z) 
+        nof = clf.negative_outlier_factor_
+        sorted_nof = np.argsort(nof)
+        selected = sorted_nof[:self._maxclust[self._cycle]]
+        np.save("selected_%s.npy"%self._cycle, selected)
+
+        return selected
+
     def _generate(self, confs):
 
         LOGGER.info('Sampling conformers in generation %d ...' % self._cycle)
@@ -628,11 +718,41 @@ class ClustENM(Ensemble):
 
         confs_cg = confs_ex[:, self._idx_cg]
 
-        LOGGER.info('Clustering in generation %d ...' % self._cycle)
-        label_cg = self._hc(confs_cg)
-        centers, wei = self._centers(confs_cg, label_cg)
-        LOGGER.report('Centroids were generated in %.2fs.',
-                      label='_clustenm_gen')
+        if self._cycle == 1:
+            LOGGER.info('Training initial model.')
+            LOGGER.info('Pre-processing data.')
+            print("new:", confs_cg.shape)
+            X, e_rmsd = self._preprocess_data(confs_cg)
+            self._trainer = self._train_model(X, e_rmsd)
+            z = self._predict(X, self._trainer)
+
+        elif self._cycle ==2 or (self._cycle-1) % self._train_every == 0:
+            LOGGER.info('Re-training model.')
+            LOGGER.info('Pre-processing data.')
+            old_confs_cg = self._allconformers[:, self._idx_cg]
+            all_confs_cg = np.concatenate((old_confs_cg, confs_cg))
+            print("old:", old_confs_cg.shape[0])
+            print("new:", confs_cg.shape[0])
+            print("all:", all_confs_cg.shape[0])
+            X, e_rmsd = self._preprocess_data(all_confs_cg)
+            self._trainer = self._train_model(X, e_rmsd)
+            current = X.shape[0] - confs_cg.shape[0]
+            z = self._predict(X[current:], self._trainer)
+
+        else:
+            LOGGER.info('Using existing model.')
+            LOGGER.info('Pre-processing data.')
+            print("new:", confs_cg.shape)
+            X, e_rmsd = self._preprocess_data(confs_cg)
+            z = self._predict(X, self._trainer)
+
+        centers = self._select_outliers(z)
+
+        wei = np.zeros((centers.shape[0]))
+        #label_cg = self._hc(confs_cg)
+        #centers, wei = self._centers(confs_cg, label_cg)
+        #LOGGER.report('Centroids were generated in %.2fs.',
+        #              label='_clustenm_gen')
 
         return confs_ex[centers], confs_ex, wei
 
@@ -877,7 +997,7 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, save_all=False, **kwargs):
+            outlier=True, mzscore=3.5, save_all=False, train_every=10, device="cpu", **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1053,6 +1173,8 @@ class ClustENM(Ensemble):
         self._v1 = kwargs.pop('v1', False)
 
         self._save_all = save_all
+        self._train_every = train_every
+        self._device = device
 
         self._cycle = 0
 
@@ -1136,9 +1258,12 @@ class ClustENM(Ensemble):
                 keys.append((i, j))
             conformers = np.vstack((conformers, start_confs))
             allconformers = np.vstack((allconformers, all_confs))
+            self._allconformers = allconformers
+
 
         all_ens = Ensemble()
         all_ens.addCoordset(allconformers)
+        self._oldconfs = all_ens
         if self._save_all:
             writeDCD("all_confs.dcd", all_ens)
 
