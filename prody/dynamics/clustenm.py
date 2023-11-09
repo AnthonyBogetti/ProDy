@@ -124,6 +124,7 @@ class ClustENM(Ensemble):
         self._allconformers = None
         self._trainer = None
         self._train_every = 10
+        self._n_neighbors = 20
         self._device = None
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
@@ -691,7 +692,7 @@ class ClustENM(Ensemble):
         return z
 
     def _select_outliers(self, z):
-        clf = LocalOutlierFactor(n_neighbors=20).fit(z) 
+        clf = LocalOutlierFactor(n_neighbors=self._n_neighbors).fit(z) 
         nof = clf.negative_outlier_factor_
         sorted_nof = np.argsort(nof)
         selected = sorted_nof[:self._maxclust[self._cycle]]
@@ -997,7 +998,8 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, save_all=False, train_every=10, device="cpu", **kwargs):
+            outlier=True, mzscore=3.5, save_all=False, 
+            train_every=10, device="cpu", n_neighbors=20, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1174,6 +1176,7 @@ class ClustENM(Ensemble):
 
         self._save_all = save_all
         self._train_every = train_every
+        self._n_neighbors = n_neighbors
         self._device = device
 
         self._cycle = 0
