@@ -115,6 +115,7 @@ class ClustENM(Ensemble):
         self._tmdk = 10.
 
         self._save_all = False
+        self._n_neighbors = 20
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -640,7 +641,7 @@ class ClustENM(Ensemble):
         n_cg = self._idx_cg.shape[0]
         tmp = confs_cg.reshape(-1, 3 * n_cg)
         distmat = pairwise_distances(X=tmp, metric=lambda x, y: self._calc_rmsd(x, y, n_cg))
-        clf = LocalOutlierFactor(n_neighbors=20, metric="precomputed").fit(distmat)
+        clf = LocalOutlierFactor(n_neighbors=self._n_neighbors, metric="precomputed").fit(distmat)
         nof = clf.negative_outlier_factor_
         sorted_nof = np.argsort(nof)
         centers = sorted_nof[:self._maxclust[self._cycle]]
@@ -890,7 +891,8 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, save_all=False, **kwargs):
+            outlier=True, mzscore=3.5, save_all=False, 
+            n_neighbors=20, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1066,6 +1068,7 @@ class ClustENM(Ensemble):
         self._v1 = kwargs.pop('v1', False)
 
         self._save_all = save_all
+        self._n_neighbors = n_neighbors
 
         self._cycle = 0
 
