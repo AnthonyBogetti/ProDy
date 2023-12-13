@@ -1101,6 +1101,7 @@ class ClustENM(Ensemble):
             self._cycle += 1
             LOGGER.info('Generation %d ...' % i)
             confs, allconfs, weights = self._generate(start_confs)
+            confs2 = confs.copy()
             if self._sim:
                 if self._t_steps[i] != 0:
                     LOGGER.info('Minimization, heating-up & simulation in generation %d ...' % i)
@@ -1130,17 +1131,19 @@ class ClustENM(Ensemble):
             sizes.extend(weights[idx])
             potentials.extend(pots[idx])
             start_confs = self._superpose_cg(confs[idx])
-            all_confs = self._superpose_cg(allconfs)
+            all_confs = self._superpose_cg(confs2[idx])
 
             for j in range(start_confs.shape[0]):
                 keys.append((i, j))
             conformers = np.vstack((conformers, start_confs))
             allconformers = np.vstack((allconformers, all_confs))
 
+        tmp = self._atoms.copy()
         all_ens = Ensemble()
         all_ens.addCoordset(allconformers)
+        tmp.setCoords(allconformers)
         if self._save_all:
-            writeDCD("all_confs.dcd", all_ens)
+            writePDB("pre_min.pdb", tmp)
 
         LOGGER.timeit('_clustenm_ens')
         LOGGER.info('Creating an ensemble of conformers ...')
