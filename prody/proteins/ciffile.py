@@ -19,7 +19,7 @@ from .starfile import parseSTARLines, StarDict, parseSTARSection
 from .cifheader import getCIFHeaderDict
 from .header import buildBiomolecules, assignSecstr, isHelix, isSheet
 
-__all__ = ['parseMMCIFStream', 'parseMMCIF']
+__all__ = ['parseMMCIFStream', 'parseMMCIF', 'parseCIF']
 
 
 class MMCIFParseError(Exception):
@@ -36,6 +36,11 @@ _parseMMCIFdoc = """
         chains are parsed
     :type chain: str
 
+    :arg segment: segment identifiers for parsing specific chains, e.g.
+        ``segment='A'``, ``segment='B'``, ``segment='DE'``, by default all
+        segment are parsed
+    :type segment: str
+
     :arg subset: a predefined keyword to parse subset of atoms, valid keywords
         are ``'calpha'`` (``'ca'``), ``'backbone'`` (``'bb'``), or **None**
         (read all atoms), e.g. ``subset='bb'``
@@ -46,10 +51,17 @@ _parseMMCIFdoc = """
 
     :arg altloc: if a location indicator is passed, such as ``'A'`` or ``'B'``,
          only indicated alternate locations will be parsed as the single
-         coordinate set of the AtomGroup, if *altloc* is set **True** all
+         coordinate set of the AtomGroup, if *altloc* is set ``'all'`` then all
          alternate locations will be parsed and each will be appended as a
          distinct coordinate set, default is ``"A"``
     :type altloc: str
+
+    :arg unite_chains: unite chains with the same segment name (auth_asym_id), making chain ids be 
+        auth_asym_id instead of label_asym_id. This can be helpful in some cases e.g. alignments, but can 
+        cause some problems too. For example, using :meth:`.buildBiomolecules` afterwards requires original 
+        chain id (label_asym_id). Using biomol=True, inside parseMMCIF is fine.
+        Default is *False*
+    :type unite_chains: bool
     """
 
 _PDBSubsets = {'ca': 'ca', 'calpha': 'ca', 'bb': 'bb', 'backbone': 'bb'}
@@ -66,21 +78,15 @@ def parseMMCIF(pdb, **kwargs):
     :arg pdb: a PDB identifier or a filename
         If needed, mmCIF files are downloaded using :func:`.fetchPDB()` function.
     :type pdb: str
-
-    :arg chain: comma separated string or list-like of chain IDs
-    :type chain: str, tuple, list, :class:`~numpy.ndarray`
-
-    :arg unite_chains: unite chains with the same segment name
-        Default is *False*
-    :type unite_chains: bool
     """
     chain = kwargs.pop('chain', None)
+    segment = kwargs.pop('segment', None)
     title = kwargs.get('title', None)
     unite_chains = kwargs.get('unite_chains', False)
     auto_bonds = SETTINGS.get('auto_bonds')
     get_bonds = kwargs.get('bonds', auto_bonds)
     if get_bonds:
-        LOGGER.warn('Parsing struct_conn information from mmCIF is current unsupported and no bond information is added to the results')
+        LOGGER.warn('Parsing struct_conn information from mmCIF is currently unsupported and no bond information is added to the results')
     if not os.path.isfile(pdb):
         if len(pdb) == 5 and pdb.isalnum():
             if chain is None:
@@ -99,8 +105,12 @@ def parseMMCIF(pdb, **kwargs):
 
             if os.path.isfile(pdb + '.cif'):
                 filename = pdb + '.cif'
+                LOGGER.debug('CIF file is found in working directory ({0}).'
+                            .format(filename))
             elif os.path.isfile(pdb + '.cif.gz'):
                 filename = pdb + '.cif.gz'
+                LOGGER.debug('CIF file is found in working directory ({0}).'
+                            .format(filename))
             else:
                 filename = fetchPDB(pdb, report=True,
                                     format='cif', compressed=False)
@@ -119,12 +129,30 @@ def parseMMCIF(pdb, **kwargs):
             title = title[3:]
         kwargs['title'] = title
     cif = openFile(pdb, 'rt')
-    result = parseMMCIFStream(cif, chain=chain, **kwargs)
+    result = parseMMCIFStream(cif, chain=chain, segment=segment, **kwargs)
     cif.close()
     if unite_chains:
-        result.setSegnames(result.getChids())
+        if isinstance(result, AtomGroup):
+            result.setChids(result.getSegnames())
+
+        elif isinstance(result, list):
+            # e.g. multiple biomol assemblies
+            [r.setChids(r.getSegnames()) for r in result if isinstance(r, AtomGroup)]
+
+        elif isinstance(result, tuple):
+            # atoms, header
+            if isinstance(result[0], AtomGroup):
+                result[0].setChids(result[0].getSegnames())
+
+            elif isinstance(result[0], list):
+                # e.g. multiple biomol assemblies
+                [r.setChids(r.getSegnames()) for r in result[0] if isinstance(r, AtomGroup)]
+
+        elif result is not None:
+            raise TypeError('result from parseMMCIFStream should be a tuple, AtomGroup or list')
     return result
 
+parseCIF = parseMMCIF
 
 def parseMMCIFStream(stream, **kwargs):
     """Returns an :class:`.AtomGroup` and/or a class:`.StarDict` 
@@ -138,6 +166,8 @@ def parseMMCIFStream(stream, **kwargs):
     model = kwargs.get('model')
     subset = kwargs.get('subset')
     chain = kwargs.get('chain')
+    segment = kwargs.get('segment')
+    unite_chains = kwargs.get('unite_chains', False)
     altloc = kwargs.get('altloc', 'A')
     header = kwargs.get('header', False)
     assert isinstance(header, bool), 'header must be a boolean'
@@ -150,6 +180,15 @@ def parseMMCIFStream(stream, **kwargs):
             raise TypeError('model must be an integer, {0} is invalid'
                             .format(str(model)))
     title_suffix = ''
+
+
+    if chain is not None:
+        if not isinstance(chain, str):
+            raise TypeError('chain must be a string')
+        elif len(chain) == 0:
+            raise ValueError('chain must not be an empty string')
+        title_suffix = chain + title_suffix
+
     if subset:
         try:
             subset = _PDBSubsets[subset.lower()]
@@ -159,12 +198,13 @@ def parseMMCIFStream(stream, **kwargs):
             raise ValueError('{0} is not a valid subset'
                              .format(repr(subset)))
         title_suffix = '_' + subset
-    if chain is not None:
-        if not isinstance(chain, str):
-            raise TypeError('chain must be a string')
-        elif len(chain) == 0:
-            raise ValueError('chain must not be an empty string')
-        title_suffix = '_' + chain + title_suffix
+
+    if segment is not None:
+        if not isinstance(segment, str):
+            raise TypeError('segment must be a string')
+        elif len(segment) == 0:
+            raise ValueError('segment must not be an empty string')
+        title_suffix = '_' + segment + title_suffix
 
     ag = None
     if 'ag' in kwargs:
@@ -194,7 +234,8 @@ def parseMMCIFStream(stream, **kwargs):
         if header or biomol or secondary:
             hd = getCIFHeaderDict(lines)
 
-        _parseMMCIFLines(ag, lines, model, chain, subset, altloc)
+        _parseMMCIFLines(ag, lines, model, chain, subset, altloc, 
+                         segment, unite_chains)
 
         if ag.numAtoms() > 0:
             LOGGER.report('{0} atoms and {1} coordinate set(s) were '
@@ -239,10 +280,15 @@ parseMMCIFStream.__doc__ += _parseMMCIFdoc
 
 
 def _parseMMCIFLines(atomgroup, lines, model, chain, subset,
-                     altloc_torf):
+                     altloc_torf, segment, unite_chains,
+                     report=False):
     """Returns an AtomGroup. See also :func:`.parsePDBStream()`.
 
     :arg lines: mmCIF lines
+
+    :arg report: whether to report warnings about not finding data
+        default False
+    :type report: bool
     """
 
     if subset is not None:
@@ -375,18 +421,25 @@ def _parseMMCIFLines(atomgroup, lines, model, chain, subset,
             if not (atomname in subset and resname in protein_resnames):
                 continue
 
-        chID = line.split()[fields['auth_asym_id']]
+        chID = line.split()[fields['label_asym_id']]
+        segID = line.split()[fields['auth_asym_id']]
+
         if chain is not None:
             if isinstance(chain, str):
                 chain = chain.split(',')
             if not chID in chain:
+                if not unite_chains:
+                    continue
+                if not segID in chain:
+                    continue
+
+        if segment is not None:
+            if isinstance(segment, str):
+                segment = segment.split(',')
+            if not segID in segment:
                 continue
 
-        segID = line.split()[fields['label_asym_id']]
-
         alt = line.split()[fields['label_alt_id']]
-        if alt not in which_altlocs and which_altlocs != 'all':
-            continue
 
         if alt == '.':
             alt = ' '
@@ -434,39 +487,43 @@ def _parseMMCIFLines(atomgroup, lines, model, chain, subset,
     else:
         modelSize = acount
 
+    mask = np.full(modelSize, True, dtype=bool)
+    if which_altlocs != 'all':
+        #mask out any unwanted alternative locations
+        mask = (altlocs == '') | (altlocs == which_altlocs)
+
+    if np.all(mask == False):
+        mask = (altlocs == '') | (altlocs == altlocs[0])
+
     if addcoords:
-        atomgroup.addCoordset(coordinates[:modelSize])
+        atomgroup.addCoordset(coordinates[mask][:modelSize])
     else:
-        atomgroup._setCoords(coordinates[:modelSize])
+        atomgroup._setCoords(coordinates[mask][:modelSize])
 
-    atomgroup.setNames(atomnames[:modelSize])
-    atomgroup.setResnames(resnames[:modelSize])
-    atomgroup.setResnums(resnums[:modelSize])
-    atomgroup.setSegnames(segnames[:modelSize])
-    atomgroup.setChids(chainids[:modelSize])
-    atomgroup.setFlags('hetatm', hetero[:modelSize])
-    atomgroup.setFlags('pdbter', termini[:modelSize])
-    atomgroup.setFlags('selpdbter', termini[:modelSize])
-    atomgroup.setAltlocs(altlocs[:modelSize])
-    atomgroup.setIcodes(icodes[:modelSize])
-    atomgroup.setSerials(serials[:modelSize])
+    atomgroup.setNames(atomnames[mask][:modelSize])
+    atomgroup.setResnames(resnames[mask][:modelSize])
+    atomgroup.setResnums(resnums[mask][:modelSize])
+    atomgroup.setSegnames(segnames[mask][:modelSize])
+    atomgroup.setChids(chainids[mask][:modelSize])
+    atomgroup.setFlags('hetatm', hetero[mask][:modelSize])
+    atomgroup.setFlags('pdbter', termini[mask][:modelSize])
+    atomgroup.setFlags('selpdbter', termini[mask][:modelSize])
+    atomgroup.setAltlocs(altlocs[mask][:modelSize])
+    atomgroup.setIcodes(icodes[mask][:modelSize])
+    atomgroup.setSerials(serials[mask][:modelSize])
 
-    atomgroup.setElements(elements[:modelSize])
+    atomgroup.setElements(elements[mask][:modelSize])
     from prody.utilities.misctools import getMasses
-    atomgroup.setMasses(getMasses(elements[:modelSize]))
-    atomgroup.setBetas(bfactors[:modelSize])
-    atomgroup.setOccupancies(occupancies[:modelSize])
+    atomgroup.setMasses(getMasses(elements[mask][:modelSize]))
+    atomgroup.setBetas(bfactors[mask][:modelSize])
+    atomgroup.setOccupancies(occupancies[mask][:modelSize])
 
     anisou = None
     siguij = None
-    try:
-        data = parseSTARSection(lines, "_atom_site_anisotrop")
-        x = data[0] # check if data has anything in it
-    except IndexError:
-        LOGGER.warn("No anisotropic B factors found")
-    else:
+    data = parseSTARSection(lines, "_atom_site_anisotrop", report=report)
+    if len(data) > 0:
         anisou = np.zeros((acount, 6),
-                          dtype=ATOMIC_FIELDS['anisou'].dtype)
+                          dtype=float)
         
         if "_atom_site_anisotrop.U[1][1]_esd" in data[0].keys():
             siguij = np.zeros((acount, 6),
@@ -504,6 +561,6 @@ def _parseMMCIFLines(atomgroup, lines, model, chain, subset,
 
     if model is None:
         for n in range(1, nModels):
-            atomgroup.addCoordset(coordinates[n*modelSize:(n+1)*modelSize])
+            atomgroup.addCoordset(coordinates[mask][n*modelSize:(n+1)*modelSize])
 
     return atomgroup
