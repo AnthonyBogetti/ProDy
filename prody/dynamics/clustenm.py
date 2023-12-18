@@ -446,7 +446,7 @@ class ClustENM(Ensemble):
 
         return good
 
-    def _calculateChirality(c, n, ca, ha):
+    def _calculateChirality(self, c, n, ca, ha):
 
         can = ca-n
         cac = ca-c
@@ -470,14 +470,16 @@ class ClustENM(Ensemble):
                 n  = residue.select("name N").getCoords()[0]
                 ca = residue.select("name CA").getCoords()[0]
                 ha = residue.select("name HA").getCoords()[0]
-                check = _calculateChirality(c, n, ca, ha)
+                check = self._calculateChirality(c, n, ca, ha)
                 if check < 1:
-                    LOGGER.info('Detected flipped chirality! Conformation will be discarded.')
                     delete_conf = True
             if delete_conf:
-                arr[idx] == 1
+                LOGGER.info('Detected flipped chirality! Conformation %s will be discarded.'%(idx+1))
+                arr[idx] = 1
 
-        return arr > 0
+        print(arr)
+        print(arr < 1)
+        return arr < 1
 
     def _sample_v1(self, conf):
 
@@ -1149,7 +1151,7 @@ class ClustENM(Ensemble):
             pots = np.array(pots)[idx]
             confs = np.array(confs)[idx]
 
-            idx = _checkChirality(confs)
+            idx = self._checkChirality(confs)
             weights = weights[idx]
             pots = pots[idx]
             confs = confs[idx]
