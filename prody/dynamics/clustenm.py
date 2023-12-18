@@ -446,6 +446,39 @@ class ClustENM(Ensemble):
 
         return good
 
+    def _calculateChirality(c, n, ca, ha):
+
+        can = ca-n
+        cac = ca-c
+        caha = ca-ha
+        norm = np.cross(can, cac)
+        dot = np.dot(norm, caha)
+        return dot
+
+    def _checkChirality(self, arg):
+
+        arr = np.zeros((arg.shape[0]))
+
+        for idx, val in enumerate(arg):
+            delete_conf = False
+            conf = self._atoms.copy()
+            conf.setCoords(val)
+            for residue in conf.iterResidues():
+                if residue.getResnames()[0] == "GLY":
+                    continue
+                c  = residue.select("name C").getCoords()[0]
+                n  = residue.select("name N").getCoords()[0]
+                ca = residue.select("name CA").getCoords()[0]
+                ha = residue.select("name HA").getCoords()[0]
+                check = _calculateChirality(c, n, ca, ha)
+                if check < 1:
+                    LOGGER.info('Detected flipped chirality! Conformation will be discarded.')
+                    delete_conf = True
+            if delete_conf:
+                arr[idx] == 1
+
+        return arr > 0
+
     def _sample_v1(self, conf):
 
         tmp = self._atoms.copy()
@@ -1115,6 +1148,11 @@ class ClustENM(Ensemble):
             weights = np.array(weights)[idx]
             pots = np.array(pots)[idx]
             confs = np.array(confs)[idx]
+
+            idx = _checkChirality(confs)
+            weights = weights[idx]
+            pots = pots[idx]
+            confs = confs[idx]
 
             if self._outlier:
                 idx = np.logical_not(self._outliers(pots))
