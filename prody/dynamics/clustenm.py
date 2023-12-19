@@ -477,8 +477,6 @@ class ClustENM(Ensemble):
                 LOGGER.info('Detected flipped chirality! Conformation %s will be discarded.'%(idx+1))
                 arr[idx] = 1
 
-        print(arr)
-        print(arr < 1)
         return arr < 1
 
     def _sample_v1(self, conf):

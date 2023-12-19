@@ -133,6 +133,66 @@ def sampleModes(modes, atoms=None, n_confs=1000, rmsd=1.0):
         for i in range(n_confs):
             append((array * scale * randn[i]).reshape((n_atoms, 3)))
 
+    stds = []
+    zees = []
+    for conf in confs:
+
+        confstd = []
+        confzee = []
+
+        xs = conf[:,0]
+        xm = xs.mean()
+        xd = xs.std()
+        xzee = (xs - xm)/xd
+        confzee.append(xzee)
+        confstd.append(xd)
+
+        ys = conf[:,1]
+        ym = ys.mean()
+        yd = ys.std()
+        yzee = (ys - ym)/yd
+        confzee.append(yzee)
+        confstd.append(yd)
+        
+        zs = conf[:,2]
+        zm = zs.mean()
+        zd = zs.std()
+        zzee = (zs - zm)/zd
+        confzee.append(zzee)
+        confstd.append(zd)
+
+        zees.append(confzee)
+        stds.append(confstd)
+
+    zee_arr = np.abs(np.array(zees))
+    std_arr = np.abs(np.array(stds))
+    conf_delete = []
+    for ci in range(zee_arr.shape[0]):
+        delete_atoms = np.zeros((zee_arr[0].shape[1]))
+        zee = zee_arr[i].reshape(-1,3)
+        stdee = std_arr[i]
+        for idx, ai in enumerate(zee):
+            if ai[0] > stdee[0] or ai[1] > stdee[1] or ai[2] > stdee[2]:
+                delete_atoms[idx] = 1
+        conf_delete.append(np.where(delete_atoms>0)[0].shape[0])
+
+    n_atoms_eff = int(np.mean(conf_delete))
+    LOGGER.info('Using an effective number of %s atoms for RMSD scaling.'%n_atoms_eff)
+    scale = n_atoms_eff**0.5 * rmsd / coef
+
+    confs = []
+    append = confs.append
+    scale = scale / magnitudes * variances ** 0.5
+
+    array = modes._getArray()
+    if array.ndim > 1:
+        for i in range(n_confs):
+            append((array * scale * randn[i]).sum(1).reshape((n_atoms, 3)))
+    else:
+        for i in range(n_confs):
+            append((array * scale * randn[i]).reshape((n_atoms, 3)))
+
+
     ensemble = Ensemble('Conformations along {0}'.format(modes))
     if initial is None:
         ensemble.setCoords(np.zeros((n_atoms, 3)))
