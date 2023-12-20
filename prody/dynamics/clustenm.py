@@ -43,8 +43,9 @@ from .imanm import imANM
 from .exanm import exANM
 from .editing import extendModel
 from .sampling import sampleModes
+from .compare import calcOverlap
 from prody.atomic import AtomGroup
-from prody.measure import calcTransformation, applyTransformation, calcRMSD
+from prody.measure import calcTransformation, applyTransformation, calcRMSD, calcDeformVector, superpose
 from prody.ensemble import Ensemble
 from prody.proteins import writePDB, parsePDB, writePDBStream, parsePDBStream
 from prody.utilities import createStringIO, importLA, mad
@@ -71,6 +72,7 @@ class ClustENM(Ensemble):
     def __init__(self, title=None):
 
         self._atoms = None
+        self._target = None
         self._nuc = None
         self._ph = 7.0
 
@@ -110,6 +112,8 @@ class ClustENM(Ensemble):
         self._indexer = None
         self._targeted = False
         self._tmdk = 10.
+
+        self._top_confs = 5
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -182,6 +186,19 @@ class ClustENM(Ensemble):
             self._n_atoms = self._atoms.numAtoms()
             self._indices = None
 
+
+    def setTarget(self, atoms, pH=7.0):
+
+        atoms = atoms.select('not hetatm')
+
+        LOGGER.info('Fixing the target structure ...')
+        LOGGER.timeit('_clustenm_fix')
+        self._ph = pH
+        self._fix(atoms, target=True)
+        LOGGER.report('The target structure was fixed in %.2fs.',
+                      label='_clustenm_fix')
+
+
     def getTitle(self):
 
         'Returns the title.'
@@ -209,7 +226,7 @@ class ClustENM(Ensemble):
             raise TypeError('title must be either str or None')
         self._title = title
 
-    def _fix(self, atoms):
+    def _fix(self, atoms, target=False):
 
         try:
             from pdbfixer import PDBFixer
@@ -236,9 +253,15 @@ class ClustENM(Ensemble):
         PDBFile.writeFile(fixed.topology, fixed.positions,
                           stream, keepIds=True)
         stream.seek(0)
-        self._atoms = parsePDBStream(stream)
-        self._atoms.setTitle(title)
-        stream.close()
+
+        if target:
+            self._target = parsePDBStream(stream)
+            self._target.setTitle(title)
+            stream.close()
+        else:
+            self._atoms = parsePDBStream(stream)
+            self._atoms.setTitle(title)
+            stream.close()
 
         self._topology = fixed.topology
         self._positions = fixed.positions
@@ -548,6 +571,11 @@ class ClustENM(Ensemble):
         tmp.setCoords(conf)
         cg = tmp[self._idx_cg]
 
+        tmp_target = self._target.copy()
+        target_ca = tmp_target.select("name CA")
+        initial_ca = tmp.select("name CA")
+        aligned_initial_ca, T = superpose(initial_ca, target_ca)
+
         anm_cg = self._buildANM(cg)
 
         if not self._checkANM(anm_cg):
@@ -560,6 +588,23 @@ class ClustENM(Ensemble):
                              n_confs=self._n_confs,
                              rmsd=self._rmsd[self._cycle])
         coordsets = ens_ex.getCoordsets()
+
+
+        conf_overlaps = []
+        conf_rmsds = []
+                                                                                   
+        for conf in coordsets:
+            conf_ca = conf[self._idx_cg]
+                                                                                    
+            aligned_initial, T = superpose(initial_ca, conf_ca)
+            defvec_initial_conf = calcDeformVector(aligned_initial, conf_ca)
+            aligned_conf, T = superpose(conf_ca, target_ca)
+            defvec_conf_target = calcDeformVector(aligned_conf, target_ca)
+                                                                                        
+            conf_overlaps.append(calcOverlap(defvec_initial_conf.getNormed(), 
+                                             defvec_conf_target.getNormed()))
+
+            conf_rmsds.append(calcRMSD(aligned_initial_ca, target_ca))
 
         if self._targeted:
             if self._parallel:
@@ -576,7 +621,7 @@ class ClustENM(Ensemble):
 
             LOGGER.debug('%d/%d sets of coordinates were moved to the target' % (len(poses), len(coordsets)))
 
-        return coordsets
+        return coordsets, np.array(conf_overlaps), np.array(conf_rmsds)
 
     def _rmsds(self, coords):
 
@@ -652,19 +697,14 @@ class ClustENM(Ensemble):
         else:
             tmp = [sample_method(conf) for conf in confs]
 
-        tmp = [r for r in tmp if r is not None]
+        confs_ex = np.array([r for r in tmp[0][0] if r is not None])
+        correlations = tmp[0][1]
+        rmsds = tmp[0][2]
+        top_correlations_idx = np.argsort(correlations)[::-1][:self._top_confs]
+        LOGGER.info("Conformations %s are chosen to continue"%top_correlations_idx)
 
-        confs_ex = np.concatenate(tmp)
+        return confs_ex[top_correlations_idx], np.zeros(self._top_confs)
 
-        confs_cg = confs_ex[:, self._idx_cg]
-
-        LOGGER.info('Clustering in generation %d ...' % self._cycle)
-        label_cg = self._hc(confs_cg)
-        centers, wei = self._centers(confs_cg, label_cg)
-        LOGGER.report('Centroids were generated in %.2fs.',
-                      label='_clustenm_gen')
-
-        return confs_ex[centers], wei
 
     def _outliers(self, arg):
 
@@ -907,7 +947,7 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, **kwargs):
+            outlier=True, mzscore=3.5, top_confs=5, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1081,6 +1121,8 @@ class ClustENM(Ensemble):
         self._outlier = False if self._sol == 'exp' else outlier
         self._mzscore = mzscore
         self._v1 = kwargs.pop('v1', False)
+
+        self._top_confs = top_confs
 
         self._cycle = 0
 
