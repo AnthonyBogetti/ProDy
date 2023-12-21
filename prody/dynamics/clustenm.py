@@ -113,8 +113,6 @@ class ClustENM(Ensemble):
         self._targeted = False
         self._tmdk = 10.
 
-        self._top_confs = 5
-
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
 
@@ -700,10 +698,10 @@ class ClustENM(Ensemble):
         confs_ex = np.array([r for r in tmp[0][0] if r is not None])
         correlations = tmp[0][1]
         rmsds = tmp[0][2]
-        top_correlations_idx = np.argsort(correlations)[::-1][:self._top_confs]
+        top_correlations_idx = np.argsort(correlations)[::-1][:self._maxclust[-1]]
         LOGGER.info("Conformations %s are chosen to continue"%top_correlations_idx)
 
-        return confs_ex[top_correlations_idx], np.zeros(self._top_confs)
+        return confs_ex[top_correlations_idx], np.zeros(self._maxclust[-1])
 
 
     def _outliers(self, arg):
@@ -947,7 +945,7 @@ class ClustENM(Ensemble):
             n_gens=5, maxclust=None, threshold=None,
             solvent='imp', sim=True, force_field=None, temp=303.15,
             t_steps_i=1000, t_steps_g=7500,
-            outlier=True, mzscore=3.5, top_confs=5, **kwargs):
+            outlier=True, mzscore=3.5, **kwargs):
 
         '''
         Performs a ClustENM run.
@@ -1121,8 +1119,6 @@ class ClustENM(Ensemble):
         self._outlier = False if self._sol == 'exp' else outlier
         self._mzscore = mzscore
         self._v1 = kwargs.pop('v1', False)
-
-        self._top_confs = top_confs
 
         self._cycle = 0
 
