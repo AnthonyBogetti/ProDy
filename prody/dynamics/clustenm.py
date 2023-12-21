@@ -34,6 +34,8 @@ from sys import stdout
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 from scipy.cluster.hierarchy import fcluster, linkage
+from sklearn.metrics import pairwise_distances
+from sklearn.neighbors import LocalOutlierFactor
 
 from prody import LOGGER
 from .anm import ANM
@@ -639,6 +641,14 @@ class ClustENM(Ensemble):
 
         return centers, wei
 
+
+    def _calc_rmsd(self, conf1, conf2, n_cg):
+        conf1 = conf1.reshape(n_cg, 3)
+        conf2 = conf2.reshape(n_cg, 3)
+
+        return calcRMSD(conf1, conf2)
+
+
     def _generate(self, confs):
 
         LOGGER.info('Sampling conformers in generation %d ...' % self._cycle)
@@ -658,13 +668,17 @@ class ClustENM(Ensemble):
 
         confs_cg = confs_ex[:, self._idx_cg]
 
-        LOGGER.info('Clustering in generation %d ...' % self._cycle)
-        label_cg = self._hc(confs_cg)
-        centers, wei = self._centers(confs_cg, label_cg)
-        LOGGER.report('Centroids were generated in %.2fs.',
-                      label='_clustenm_gen')
+        LOGGER.info('Detecting outliers.')
+        n_cg = self._idx_cg.shape[0]
+        tmp = confs_cg.reshape(-1, 3 * n_cg)
+        distmat = pairwise_distances(X=tmp, metric=lambda x, y: self._calc_rmsd(x, y, n_cg))
+        clf = LocalOutlierFactor(n_neighbors=20, metric="precomputed").fit(distmat)
+        nof = clf.negative_outlier_factor_
+        sorted_nof = np.argsort(nof)
+        centers = sorted_nof[:self._maxclust[self._cycle]]
 
-        return confs_ex[centers], wei
+        return confs_ex[centers], np.zeros((centers.shape[0]))
+
 
     def _outliers(self, arg):
 
