@@ -561,6 +561,13 @@ class ClustENM(Ensemble):
                              rmsd=self._rmsd[self._cycle])
         coordsets = ens_ex.getCoordsets()
 
+        LOGGER.info("Checking for chirality flips ...")
+        idx = self._checkChirality(coordsets)
+        coordsets = coordsets[idx]
+        
+        if coordsets.shape[0] == coordsets[idx].shape[0]:
+            LOGGER.info("No chirality flips detected.")
+
         if self._targeted:
             if self._parallel:
                 with Pool(cpu_count()) as p:
@@ -1149,10 +1156,10 @@ class ClustENM(Ensemble):
             pots = np.array(pots)[idx]
             confs = np.array(confs)[idx]
 
-            idx = self._checkChirality(confs)
-            weights = weights[idx]
-            pots = pots[idx]
-            confs = confs[idx]
+#            idx = self._checkChirality(confs)
+#            weights = weights[idx]
+#            pots = pots[idx]
+#            confs = confs[idx]
 
             if self._outlier:
                 idx = np.logical_not(self._outliers(pots))
