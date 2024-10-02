@@ -110,6 +110,7 @@ class ClustENM(Ensemble):
         self._indexer = None
         self._targeted = False
         self._tmdk = 10.
+        self._crk = 0
 
         super(ClustENM, self).__init__('Unknown')   # dummy title; will be replaced in the next line
         self._title = title
@@ -315,7 +316,10 @@ class ClustENM(Ensemble):
         except ImportError:
             raise ImportError('Please install PDBFixer and OpenMM 7.6 in order to use ClustENM.')
 
-        simulation = self._prep_sim(coords=coords)
+        forces = [self._restrainChirality(coords)] #ATB
+        simulation = self._prep_sim(coords=coords, external_forces=forces) #ATB
+
+#        simulation = self._prep_sim(coords=coords) #ATB
 
         # automatic conversion into nanometer will be carried out.
         # simulation.context.setPositions(coords * angstrom)
@@ -478,6 +482,26 @@ class ClustENM(Ensemble):
                 arr[idx] = 1
 
         return arr < 1
+
+    def _restrainChirality(self, coords): #ATB
+
+        from openmm import PeriodicTorsionForce
+        from openmm.unit import radians, kilojoule_per_mole
+
+        restraint = PeriodicTorsionForce()
+
+        conf = self._atoms.copy()
+        conf.setCoords(coords)
+        for residue in conf.iterResidues():
+            if residue.getResnames()[0] == "GLY":# or residue.getResnames()[0] == "ALA" or residue.getResnames()[0] == "PRO":
+                continue
+            c  = residue.select("name C").getIndices()
+            n  = residue.select("name N").getIndices()
+            ha = residue.select("name HA").getIndices()
+            ca = residue.select("name CA").getIndices()
+            restraint.addTorsion(c, n, ha, ca, 1, 2.1*radians, self._crk*kilojoule_per_mole)
+
+        return restraint
 
     def _sample_v1(self, conf):
 
@@ -1037,6 +1061,7 @@ class ClustENM(Ensemble):
         self._parallel = kwargs.pop('parallel', False)
         self._targeted = kwargs.pop('targeted', False)
         self._tmdk = kwargs.pop('tmdk', 15.)
+        self._crk = kwargs.pop('crk', 0.)
 
         if maxclust is None and threshold is None and n_gens > 0:
             raise ValueError('Either maxclust or threshold should be set!')
