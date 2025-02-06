@@ -360,6 +360,10 @@ from . import clustenm
 from .clustenm import *
 __all__.extend(clustenm.__all__)
 
+from . import hybrid
+from .hybrid import *
+__all__.extend(hybrid.__all__)
+
 from . import essa
 from .essa import *
 __all__.extend(essa.__all__)

@@ -53,6 +53,13 @@ def saveEnsemble(ensemble, filename=None, **kwargs):
                           '_maxIterations', '_sim', '_temp', '_t_steps', '_outlier',
                           '_mzscore', '_v1', '_parallel', '_idx_cg', '_n_cg', '_cycle',
                           '_time', '_targeted', '_tmdk', '_cc'])
+    elif isinstance(ensemble, HYBRID):
+        attr_list.extend(['_ph', '_cutoff', '_gamma', '_n_modes', '_n_confs',
+                          '_rmsd', '_n_gens', '_maxclust', '_threshold', '_sol',
+                          '_padding', '_ionicStrength', '_force_field', '_tolerance',
+                          '_maxIterations', '_sim', '_temp', '_t_steps', '_outlier',
+                          '_mzscore', '_v1', '_parallel', '_idx_cg', '_n_cg', '_cycle',
+                          '_time', '_targeted', '_tmdk', '_cc'])
         if have_openmm:
             attr_list.extend(['_topology', '_positions'])
 
@@ -138,6 +145,8 @@ def loadEnsemble(filename, **kwargs):
         ensemble = PDBEnsemble(title)
     elif type_ == 'ClustENM':
         ensemble = ClustENM(title)
+    elif type_ == 'HYBRID':
+        ensemble = HYBRID(title)
     else:
         ensemble = Ensemble(title)
 
@@ -162,6 +171,12 @@ def loadEnsemble(filename, **kwargs):
             ensemble._msa = attr_dict['_msa'][0]
     else:
         if type_ == 'ClustENM':
+            attrs = ['_ph', '_cutoff', '_gamma', '_n_modes', '_n_confs',
+                    '_rmsd', '_n_gens', '_maxclust', '_threshold', '_sol',
+                    '_sim', '_temp', '_t_steps', '_outlier', '_mzscore', '_v1',
+                    '_parallel', '_idx_ca', '_n_ca', '_cycle', '_time', '_targeted',
+                    '_tmdk', '_cc']
+        elif type_ == 'HYBRID':
             attrs = ['_ph', '_cutoff', '_gamma', '_n_modes', '_n_confs',
                     '_rmsd', '_n_gens', '_maxclust', '_threshold', '_sol',
                     '_sim', '_temp', '_t_steps', '_outlier', '_mzscore', '_v1',
