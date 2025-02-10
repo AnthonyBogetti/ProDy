@@ -29,12 +29,6 @@ norm = la.norm
 __all__ = ['HYBRID']
 
 
-class BASE(Ensemble):
-
-    def run(self):
-        pass
-
-
 class HYBRID:
 
     def __init__(self, preset="anmd"):
@@ -127,7 +121,6 @@ class HYBRID:
         simulation.context.setPositions(self._positions)
         simulation.minimizeEnergy(maxIterations=n_cycles)
         self._positions = simulation.context.getState(getPositions=True).getPositions(asNumpy=True)
-
         if save:
             PDBFile.writeFile(self._topology, self._positions, 
                               open("min.pdb", 'w'))
@@ -146,10 +139,14 @@ class HYBRID:
 
 
     def run(self):
-        return self.current_preset_instance.run(self)
+        return self.current_preset_instance.run(self, main_instance)
 
 
-class ANMD_CLASSIC(BASE):
+class ANMD_CLASSIC(Ensemble):
+
+    def __init__(self, main_instance):
+
+        self.main_instance = main_instance
 
     def run(self, main_instance):
         
@@ -157,27 +154,21 @@ class ANMD_CLASSIC(BASE):
         from openmm.unit import angstrom
 
         print("Running classic ANMD.")
-
-        self._hybrid_instance = HYBRID()
-        self._atoms = main_instance._atoms
-        self._topology = main_instance._topology
-        self._positions = main_instance._positions
+        print(self.main_instance._n_atoms)
         self._skip_modes = 0
         self._n_modes = 3
-        self._anm = main_instance._anm
-        self._ca = main_instance._ca
         self._n_steps = 5
         self._rmsd = 2
 
-        self._anm.calcModes(n_modes=self._n_modes)
+        main_instance._anm.calcModes(n_modes=self._n_modes)
 
-        pos = self._positions.value_in_unit(angstrom)[:self._topology.getNumAtoms()]
-        tmp = self._atoms.copy()
+        pos = main_instance._positions.value_in_unit(angstrom)[:main_instance._topology.getNumAtoms()]
+        tmp = main_instance._atoms.copy()
         tmp.setCoords(pos)
 
-        anm_ex, atoms_all = extendModel(self._anm, self._ca, tmp)
-        anm_ex._indices = self._anm.getIndices()
-        eval_0 = self._anm[0].getEigval()
+        anm_ex, atoms_all = extendModel(main_instance._anm, main_instance._ca, tmp)
+        anm_ex._indices = main_instance._anm.getIndices()
+        eval_0 = main_instance._anm[0].getEigval()
 
         ensembles = []
 
@@ -185,7 +176,7 @@ class ANMD_CLASSIC(BASE):
 
             modeNum = anm_ex.getIndices()[i]
 
-            eval_i = self._anm[i].getEigval()
+            eval_i = main_instance._anm[i].getEigval()
             sc_rmsd = ((1/eval_i)**0.5/(1/eval_0)**0.5)*self._rmsd
             traj_aa = traverseMode(anm_ex[i], atoms_all, n_steps=self._n_steps,
                                    rmsd=self._rmsd)
@@ -205,20 +196,20 @@ class ANMD_CLASSIC(BASE):
 
                 self._hybrid_instance.minimize(n_cycles=2)
                 
-                target_ensemble.addCoordset(self._positions)
+                target_ensemble.addCoordset(main_instance._positions)
 
             ensembles.append(target_ensemble)
 
         print(ensembles)
 
 
-class CUSTOM(BASE):
+class CUSTOM(Ensemble):
 
     def run(self, main_instance):
 
         print("Running a custom hybrid simulation.")
 
-classics = {"anmd": ANMD_CLASSIC()}
+classics = {"anmd": ANMD_CLASSIC(self)}
 
 
 
