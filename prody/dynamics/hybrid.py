@@ -39,6 +39,8 @@ class HYBRID():
         self._indices = None
         self._topology = None
         self._positions = None
+        self._potential = None
+        self._maxclust = 5
         self._forcefield = ('amber14-all.xml', 'implicit/gbn2.xml')
         self._anm = ANM()
         self._ca = None
@@ -108,6 +110,7 @@ class HYBRID():
         simulation.context.setPositions(self._positions)
         simulation.minimizeEnergy(maxIterations=n_cycles)
         self._positions = simulation.context.getState(getPositions=True).getPositions(asNumpy=True)
+        self._potential = simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
         if log:
             LOGGER.info('Energy minimization successfully completed.')
         if save:
@@ -159,6 +162,79 @@ class HYBRID():
         if log:
             LOGGER.info('ANM successfully built.')
 
+    def sample(self, conf, n_confs, n_modes, rmsd):
+
+        tmp = self._atoms.copy()
+        tmp.setCoords(conf)
+        cg = tmp[self._idx_cg]
+
+        anm_cg = self.build_anm(cg)
+
+        anm_cg.calcModes(n_modes)
+
+        anm_ex, atoms_all = extendModel(anm_cg, cg, tmp)
+        ens_ex = sampleModes(anm_ex, atoms=tmp, n_confs=n_confs, rmsd=rmsd)
+        coordsets = ens_ex.getCoordsets()
+
+    def rmsds(self, coords):
+
+        tmp = coords.reshape(-1, 3 * self._n_cg)
+
+        return pdist(tmp) / np.sqrt(self._n_cg)
+
+    def hc(self, arg):
+
+        rmsds = self.rmsds(arg)
+        link = linkage(rmsds, method='average')
+        hcl = fcluster(link, t=self._maxclust,
+                           criterion='maxclust') - 1
+        return hcl
+
+    def centroid(self, arg):
+
+        if arg.shape[0] > 2:
+            rmsds = self.rmsds(arg)
+            sim = np.exp(- squareform(rmsds) / rmsds.std())
+            idx = sim.sum(1).argmax()
+            return idx
+        else:
+            return 0
+
+    def centers(self, *args):
+
+        nl = np.unique(args[1])
+        idx = OrderedDict()
+        for i in nl:
+            idx[i] = np.where(args[1] == i)[0]
+
+        wei = [idx[k].size for k in idx.keys()]
+        centers = np.empty(nl.size, dtype=int)
+        for i in nl:
+            tmp = self.centroid(args[0][idx[i]])
+            centers[i] = idx[i][tmp]
+
+        return centers, wei
+
+    def generate(self, confs, **kwargs):
+
+        tmp = [self.sample(conf) for conf in confs]
+        tmp = [r for r in tmp if r is not None]
+
+        confs_ex = np.concatenate(tmp)
+        confs_cg = confs_ex[:, self._idx_cg]
+
+        label_cg = self._hc(confs_cg)
+        centers, wei = self._centers(confs_cg, label_cg)
+        confs_centers = confs_ex[centers]
+        
+        if len(confs_cg) > 1:
+            label_cg = self._hc(confs_cg)
+            centers, wei = self._centers(confs_cg, label_cg)
+            confs_centers = confs_ex[centers]
+        else:
+            confs_centers, wei = confs_cg, [len(confs_cg)]
+
+        return confs_centers, wei
 
     def run_anmd(self, skip_modes=0, n_modes=2, n_steps=5, rmsd=1, save=True):
         
@@ -205,13 +281,42 @@ class HYBRID():
 
         LOGGER.info('ANMD completed successfully.')
 
-#    def run_clustenm(self, rmsd=1, save=False):
-#        
-#    def run_clustenmd(self, rmsd=1, save=False):
+    def run_clustenm(self, n_gens=2, rmsd=1, save=False):
 
-
-
-
-
-
+        cycle = 0
+        potentials = [self._potential]
+        sizes = [1]
+        new_shape = [1]
+        for s in conformer.shape:
+            new_shape.append(s)
+        conf = conformer.reshape(new_shape)
+        conformers = start_confs = conf
+        keys = [(0, 0)]
+                                                                                                  
+        for i in range(1, n_gens+1):
+            cycle += 1
+            confs, weights = self.generate(start_confs)
+            conf_list = []
+            pot_list = []
+            for conf in confs:
+                self._positions = conf.getCoords()
+                self.minimize()
+                conf_list.append(self._positions)
+                pot_list.append(self._potential)
+                                                                                                  
+            idx = np.logical_not(np.isnan(pot_list))
+            weights = np.array(weights)[idx]
+            pots = np.array(pot_list)[idx]
+            confs = np.array(conf_list)[idx]
+            idx = np.full(pot_list.size, True, dtype=bool)
+                                                                                                  
+            sizes.extend(weights[idx])
+            potentials.extend(pot_list[idx])
+            start_confs = self._superpose_cg(confs[idx])
+                                                                                                  
+            for j in range(start_confs.shape[0]):
+                keys.append((i, j))
+            conformers = np.vstack((conformers, start_confs))
+                                                                                                  
+        self._build(conformers, keys, potentials, sizes)
 
