@@ -89,7 +89,7 @@ class HYBRID():
         self._indices = None
         LOGGER.info('Structure fixed successfully.')
 
-    def minimize(self, n_cycles=1000, ref=True, log=True, save=False):
+    def minimize(self, n_cycles=1000, ref=True, hw='cpu', log=True, save=False):
 
         from openmm import Platform, LangevinIntegrator, Vec3
         from openmm.app import Modeller, ForceField, \
@@ -107,7 +107,12 @@ class HYBRID():
                                          constraints=HBonds)
         integrator = LangevinIntegrator(300*kelvin, 1/picosecond, 
                                         0.002*picosecond)
-        simulation = Simulation(self._topology, system, integrator)
+
+        if hw == 'cpu': 
+            platform = Platform.getPlatformByName('CPU')
+        elif hw == 'gpu':
+            platform = Platform.getPlatformByName('CUDA')
+        simulation = Simulation(self._topology, system, integrator, platform)
         simulation.context.setPositions(self._positions)
         simulation.minimizeEnergy(maxIterations=n_cycles)
         self._positions = simulation.context.getState(getPositions=True).getPositions(asNumpy=True)
@@ -139,11 +144,11 @@ class HYBRID():
         integrator = LangevinIntegrator(300*kelvin, 1/picosecond, 
                                         0.002*picosecond)
 
-        if hw = 'cpu': 
+        if hw == 'cpu': 
             platform = Platform.getPlatformByName('CPU')
-        elif hw = 'gpu':
+        elif hw == 'gpu':
             platform = Platform.getPlatformByName('CUDA')
-        simulation = Simulation(self._topology, system, integrator)
+        simulation = Simulation(self._topology, system, integrator, platform)
         simulation.context.setPositions(self._positions)
         simulation.step(heat_steps)
         simulation.step(prod_steps)
@@ -262,14 +267,14 @@ class HYBRID():
             for conf in traj_aa:
                 self._positions = conf.getCoords()
                 self.minimize(n_cycles=2, ref=False, log=False)
-                target_ensemble.addCoordset(self._positions)
+                target_ensemble.addCoordset(self._positions*10)
 
             if save:
                 writePDB("anmd_mode_%s"%str(modeNum), target_ensemble)
 
         LOGGER.info('ANMD completed successfully.')
 
-    def run_clustenm(self, n_gens=2, rmsd=0.1, n_cycles=2, heat_steps=10, prod_steps=10, sim=False, hw='cpu', save=True):
+    def run_clustenm(self, n_gens=2, rmsd=1, n_cycles=2, heat_steps=10, prod_steps=10, sim=False, hw='cpu', save=True):
 
         if not sim:
             LOGGER.info('Starting classic CLUSTENM...')
@@ -339,7 +344,7 @@ class HYBRID():
         target_ensemble = Ensemble()
         target_ensemble.setAtoms(self._atoms)
         for conf in conformers:
-            target_ensemble.addCoordset(conf)
+            target_ensemble.addCoordset(conf*10)
 
         if save and sim:
             writePDB("clustenmd_ens.pdb", target_ensemble)
