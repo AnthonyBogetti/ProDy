@@ -40,6 +40,7 @@ class HYBRID():
         self._topology = None
         self._positions = None
         self._potential = None
+        self._reference = None
         self._maxclust = 5
         self._forcefield = ('amber14-all.xml', 'implicit/gbn2.xml')
         self._anm = ANM()
@@ -88,13 +89,13 @@ class HYBRID():
         self._indices = None
         LOGGER.info('Structure fixed successfully.')
 
-    def minimize(self, n_cycles=1000, log=True, save=False):
+    def minimize(self, n_cycles=1000, ref=True, log=True, save=False):
 
         from openmm import Platform, LangevinIntegrator, Vec3
         from openmm.app import Modeller, ForceField, \
             CutoffNonPeriodic, PME, Simulation, HBonds, NoCutoff, PDBFile
         from openmm.unit import angstrom, nanometer, picosecond, \
-            kelvin, Quantity, molar
+            kelvin, Quantity, molar, kilojoule_per_mole
 
         if log:
             LOGGER.info('Performing energy minimization...')
@@ -111,6 +112,8 @@ class HYBRID():
         simulation.minimizeEnergy(maxIterations=n_cycles)
         self._positions = simulation.context.getState(getPositions=True).getPositions(asNumpy=True)
         self._potential = simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+        if ref:
+            self._reference = simulation.context.getState(getPositions=True).getPositions(asNumpy=True)
         if log:
             LOGGER.info('Energy minimization successfully completed.')
         if save:
@@ -123,7 +126,7 @@ class HYBRID():
         from openmm.app import Modeller, ForceField, \
             CutoffNonPeriodic, PME, Simulation, HBonds, NoCutoff, PDBFile
         from openmm.unit import angstrom, nanometer, picosecond, \
-            kelvin, Quantity, molar
+            kelvin, Quantity, molar, kilojoule_per_mole
 
         if log:
             LOGGER.info('Performing MD...')
@@ -140,6 +143,7 @@ class HYBRID():
         simulation.step(heat_steps)
         simulation.step(prod_steps)
         self._positions = simulation.context.getState(getPositions=True).getPositions(asNumpy=True)
+        self._potential = simulation.context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(kilojoule_per_mole)
         if log:
             LOGGER.info('MD successfully completed.')
         if save:
@@ -152,7 +156,7 @@ class HYBRID():
 
         if log:
             LOGGER.info('Building ANM...')
-        pos = self._positions.value_in_unit(angstrom)[:self._topology.getNumAtoms()]
+        pos = self._positions[:self._topology.getNumAtoms()]
 
         tmp = self._atoms.copy()
         tmp.setCoords(pos)
@@ -162,79 +166,58 @@ class HYBRID():
         if log:
             LOGGER.info('ANM successfully built.')
 
-    def sample(self, conf, n_confs, n_modes, rmsd):
+    def sample(self, confs, **kwargs):
 
-        tmp = self._atoms.copy()
-        tmp.setCoords(conf)
-        cg = tmp[self._idx_cg]
+        tmp = []
 
-        anm_cg = self.build_anm(cg)
+        for conf in confs:
+            ctmp = self._atoms.copy()
+            ctmp.setCoords(conf)
+            cg = ctmp[self._idx_ca]
+                                                                                            
+            self._positions=ctmp.getCoords()
+                                                                                            
+            self.build_anm(log=False)
+                                                                                            
+            self._anm.calcModes(self._n_modes)
+                                                                                            
+            anm_ex, atoms_all = extendModel(self._anm, cg, ctmp)
+            ens_ex = sampleModes(anm_ex, atoms=ctmp, n_confs=self._n_confs, rmsd=self._rmsd)
+            tmp.append(ens_ex.getCoordsets())
 
-        anm_cg.calcModes(n_modes)
-
-        anm_ex, atoms_all = extendModel(anm_cg, cg, tmp)
-        ens_ex = sampleModes(anm_ex, atoms=tmp, n_confs=n_confs, rmsd=rmsd)
-        coordsets = ens_ex.getCoordsets()
-
-    def rmsds(self, coords):
-
-        tmp = coords.reshape(-1, 3 * self._n_cg)
-
-        return pdist(tmp) / np.sqrt(self._n_cg)
-
-    def hc(self, arg):
-
-        rmsds = self.rmsds(arg)
-        link = linkage(rmsds, method='average')
-        hcl = fcluster(link, t=self._maxclust,
-                           criterion='maxclust') - 1
-        return hcl
-
-    def centroid(self, arg):
-
-        if arg.shape[0] > 2:
-            rmsds = self.rmsds(arg)
-            sim = np.exp(- squareform(rmsds) / rmsds.std())
-            idx = sim.sum(1).argmax()
-            return idx
-        else:
-            return 0
-
-    def centers(self, *args):
-
-        nl = np.unique(args[1])
-        idx = OrderedDict()
-        for i in nl:
-            idx[i] = np.where(args[1] == i)[0]
-
-        wei = [idx[k].size for k in idx.keys()]
-        centers = np.empty(nl.size, dtype=int)
-        for i in nl:
-            tmp = self.centroid(args[0][idx[i]])
-            centers[i] = idx[i][tmp]
-
-        return centers, wei
-
-    def generate(self, confs, **kwargs):
-
-        tmp = [self.sample(conf) for conf in confs]
         tmp = [r for r in tmp if r is not None]
 
         confs_ex = np.concatenate(tmp)
-        confs_cg = confs_ex[:, self._idx_cg]
 
-        label_cg = self._hc(confs_cg)
-        centers, wei = self._centers(confs_cg, label_cg)
-        confs_centers = confs_ex[centers]
-        
-        if len(confs_cg) > 1:
-            label_cg = self._hc(confs_cg)
-            centers, wei = self._centers(confs_cg, label_cg)
-            confs_centers = confs_ex[centers]
-        else:
-            confs_centers, wei = confs_cg, [len(confs_cg)]
+        return confs_ex
 
-        return confs_centers, wei
+    def hclust(self, confs):
+
+        tmp3 = confs.reshape(-1, 3 * self._n_ca)
+        rmsds = pdist(tmp3) / np.sqrt(self._n_ca)
+
+        link = linkage(rmsds, method='average')
+        labels = fcluster(link, t=self._maxclust,
+                           criterion='maxclust') - 1
+
+        nl = np.unique(labels)
+        idx = OrderedDict()
+        for i in nl:
+            idx[i] = np.where(labels == i)[0]
+                                                
+        centers = np.empty(nl.size, dtype=int)
+        for i in nl:
+            tempc = confs[idx[i]]
+            if tempc.shape[0] > 2:
+                tmp = tempc.reshape(-1, 3 * self._n_ca)
+                rmsds = pdist(tmp) / np.sqrt(self._n_ca)
+                sim = np.exp(- squareform(rmsds) / rmsds.std())
+                idx2 = sim.sum(1).argmax()
+                centers[i] = idx[i][idx2]
+            else:
+                centers[i] = idx[i][0]
+
+        return centers
 
     def run_anmd(self, skip_modes=0, n_modes=2, n_steps=5, rmsd=1, save=True):
         
@@ -273,7 +256,7 @@ class HYBRID():
             LOGGER.info('Minimizing confs from mode %s.'%modeNum)
             for conf in traj_aa:
                 self._positions = conf.getCoords()
-                self.minimize(n_cycles=2, log=False)
+                self.minimize(n_cycles=2, ref=False, log=False)
                 target_ensemble.addCoordset(self._positions)
 
             if save:
@@ -281,11 +264,17 @@ class HYBRID():
 
         LOGGER.info('ANMD completed successfully.')
 
-    def run_clustenm(self, n_gens=2, rmsd=1, save=False):
+    def run_clustenm(self, n_gens=2, rmsd=0.1, n_cycles=2, heat_steps=10, prod_steps=10, sim=False, save=True):
 
+        if not sim:
+            LOGGER.info('Starting classic CLUSTENM...')
+
+        self._n_modes = 2
+        self._n_confs = 2
+        self._rmsd = rmsd
         cycle = 0
+        conformer = self._positions
         potentials = [self._potential]
-        sizes = [1]
         new_shape = [1]
         for s in conformer.shape:
             new_shape.append(s)
@@ -295,28 +284,70 @@ class HYBRID():
                                                                                                   
         for i in range(1, n_gens+1):
             cycle += 1
-            confs, weights = self.generate(start_confs)
+            confs = self.sample(start_confs)
+            chosen = self.hclust(confs[:, self._idx_ca])
+            confs = confs[chosen]
             conf_list = []
             pot_list = []
+            if sim:
+                LOGGER.info('Minimizing confs and running MD in generation %s.'%cycle)
+            else:
+                LOGGER.info('Minimizing confs in generation %s.'%cycle)
             for conf in confs:
-                self._positions = conf.getCoords()
-                self.minimize()
-                conf_list.append(self._positions)
-                pot_list.append(self._potential)
-                                                                                                  
+                self._positions = conf
+                try:
+                    self.minimize(n_cycles=n_cycles, ref=False, log=False)
+                    if sim:
+                        self.md(heat_steps=heat_steps, prod_steps=prod_steps, log=False, save=False)
+                    conf_list.append(self._positions)
+                    pot_list.append(self._potential)
+                except:
+                    LOGGER.info('OpenMM failure. The corresponding conf will be discarded.')
+                    conf_list.append(self._positions)
+                    pot_list.append(np.nan)
+
             idx = np.logical_not(np.isnan(pot_list))
-            weights = np.array(weights)[idx]
+
+            if not np.any(idx):
+                LOGGER.info('All conformations were discarded. Exiting...')
+                exit()
+
             pots = np.array(pot_list)[idx]
             confs = np.array(conf_list)[idx]
-            idx = np.full(pot_list.size, True, dtype=bool)
-                                                                                                  
-            sizes.extend(weights[idx])
-            potentials.extend(pot_list[idx])
-            start_confs = self._superpose_cg(confs[idx])
-                                                                                                  
+            potentials.extend(np.array(pot_list)[idx])
+
+            tmp0 = self._atoms.copy()
+            tmp0.setCoords(self._reference)
+            n = confs[idx].shape[0]
+            tmp1 = []
+            for i in range(n):
+                tmp2 = calcTransformation(confs[i, self._idx_ca],
+                                          tmp0[self._idx_ca])
+                tmp1.append(applyTransformation(tmp2, confs[i]))
+                                                                  
+            start_confs = np.array(tmp1)
+
             for j in range(start_confs.shape[0]):
                 keys.append((i, j))
             conformers = np.vstack((conformers, start_confs))
-                                                                                                  
-        self._build(conformers, keys, potentials, sizes)
 
+        target_ensemble = Ensemble()
+        target_ensemble.setAtoms(self._atoms)
+        for conf in conformers:
+            target_ensemble.addCoordset(conf)
+
+        if save and sim:
+            writePDB("clustenmd_ens.pdb", target_ensemble)
+        elif save and not sim:
+            writePDB("clustenm_ens.pdb", target_ensemble)
+
+        if not sim:
+            LOGGER.info('CLUSTENM completed successfully.')
+
+    def run_clustenmd(self, n_gens=2, rmsd=1, n_cycles=2, save=True):
+        
+        LOGGER.info('Starting classic CLUSTENMD...')
+
+        self.run_clustenm(n_gens=n_gens, rmsd=rmsd, n_cycles=n_cycles, sim=True, save=save)
+        
+        LOGGER.info('CLUSTENMD completed successfully.')
