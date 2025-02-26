@@ -120,7 +120,7 @@ class HYBRID():
             PDBFile.writeFile(self._topology, self._positions, 
                               open("min.pdb", 'w'))
 
-    def md(self, heat_steps=10000, prod_steps=50000000, log=True, save=False):
+    def md(self, heat_steps=10000, prod_steps=50000000, hw='cpu', log=True, save=False):
 
         from openmm import Platform, LangevinIntegrator, Vec3
         from openmm.app import Modeller, ForceField, \
@@ -138,6 +138,11 @@ class HYBRID():
                                          constraints=HBonds)
         integrator = LangevinIntegrator(300*kelvin, 1/picosecond, 
                                         0.002*picosecond)
+
+        if hw = 'cpu': 
+            platform = Platform.getPlatformByName('CPU')
+        elif hw = 'gpu':
+            platform = Platform.getPlatformByName('CUDA')
         simulation = Simulation(self._topology, system, integrator)
         simulation.context.setPositions(self._positions)
         simulation.step(heat_steps)
@@ -264,7 +269,7 @@ class HYBRID():
 
         LOGGER.info('ANMD completed successfully.')
 
-    def run_clustenm(self, n_gens=2, rmsd=0.1, n_cycles=2, heat_steps=10, prod_steps=10, sim=False, save=True):
+    def run_clustenm(self, n_gens=2, rmsd=0.1, n_cycles=2, heat_steps=10, prod_steps=10, sim=False, hw='cpu', save=True):
 
         if not sim:
             LOGGER.info('Starting classic CLUSTENM...')
@@ -298,7 +303,7 @@ class HYBRID():
                 try:
                     self.minimize(n_cycles=n_cycles, ref=False, log=False)
                     if sim:
-                        self.md(heat_steps=heat_steps, prod_steps=prod_steps, log=False, save=False)
+                        self.md(heat_steps=heat_steps, prod_steps=prod_steps, hw=hw, log=False, save=False)
                     conf_list.append(self._positions)
                     pot_list.append(self._potential)
                 except:
@@ -344,10 +349,10 @@ class HYBRID():
         if not sim:
             LOGGER.info('CLUSTENM completed successfully.')
 
-    def run_clustenmd(self, n_gens=2, rmsd=1, n_cycles=2, save=True):
+    def run_clustenmd(self, n_gens=2, rmsd=1, n_cycles=2, hw='cpu', save=True):
         
         LOGGER.info('Starting classic CLUSTENMD...')
 
-        self.run_clustenm(n_gens=n_gens, rmsd=rmsd, n_cycles=n_cycles, sim=True, save=save)
+        self.run_clustenm(n_gens=n_gens, rmsd=rmsd, n_cycles=n_cycles, sim=True, hw=hw, save=save)
         
         LOGGER.info('CLUSTENMD completed successfully.')
