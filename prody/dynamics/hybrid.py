@@ -306,7 +306,7 @@ class HYBRID():
             for conf in confs:
                 self._positions = conf
                 try:
-                    self.minimize(n_cycles=n_cycles, ref=False, log=False)
+                    self.minimize(n_cycles=n_cycles, hw=hw, ref=False, log=False)
                     if sim:
                         self.md(heat_steps=heat_steps, prod_steps=prod_steps, hw=hw, log=False, save=False)
                     conf_list.append(self._positions)
