@@ -22,7 +22,7 @@ jobs:
         auto-update-conda: true
         auto-activate-base: yes
         activate-environment: test
-        environment-file: envs/github.yaml
+          #        environment-file: envs/github.yaml
         python-version: "3.12"
     - name: Install dependencies and test
       run: |
