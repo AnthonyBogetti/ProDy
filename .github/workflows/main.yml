@@ -39,4 +39,5 @@ jobs:
         cd -
         pip install .
         python setup.py build_ext --inplace --force
+        conda install -c conda-forge pytest
         pytest
