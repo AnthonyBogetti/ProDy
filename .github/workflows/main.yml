@@ -11,3 +11,32 @@ jobs:
         uses: actions/checkout@v3
       - name: list directory
         run: ls -al
+  build_linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniconda-version: "latest"
+        channels: conda-forge, defaults
+        auto-update-conda: true
+        auto-activate-base: yes
+        activate-environment: test
+        environment-file: envs/github.yaml
+        python-version: "3.12"
+    - name: Install dependencies and test
+      run: |
+        conda init bash
+        source ~/.bashrc
+        conda activate test
+        pip install mmtf-python scikit-learn
+        cd prody/proteins/hpbmodule/
+        gfortran -O3 -fPIC -c reg_tet.f
+        variable=$(python -c 'from distutils.sysconfig import get_python_inc; print(get_python_inc())')
+        c++ -O3 -g -fPIC -c hpbmodule.cpp -o hpbmodule.o -I/$variable
+        c++ -shared -Wl,-soname,hpb.so -o hpb.so hpbmodule.o reg_tet.o -lgfortran
+        cp hpb.so ../
+        cd -
+        pip install .
+        python setup.py build_ext --inplace --force
+        pytest
