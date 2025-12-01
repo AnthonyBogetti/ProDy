@@ -750,7 +750,6 @@ def getHinges(gnm, n_modes=None, threshold=15, space=None, trim=False):
         
         for reg in merged:
             if len(reg) <= p // 10:
-                #if v[reg[0] - 1] * v[reg[-1] + 1] > 0:
                 if v[reg[0] - 1] * v[reg[-1]] > 0:
                     continue
             
