@@ -688,21 +688,24 @@ def getHinges(gnm, n_modes=None, threshold=15, space=None, trim=False):
             if gnm._kirchhoff is None:
                 raise ValueError("Kirchhoff matrix not built. Build Kirchhoff matrix before calculating modes.")
 
+            if gnm._n_modes is None:  
+                gnm.calcModes(n_modes='all')
+            
+            if (gnm._n_atoms - 1) != gnm._array.shape[1]:
+                gnm.calcModes(n_modes='all')
+            
             if n_modes is None:
             ### Default to auto-select based on 33% cumulative variance ###
                 cumin =0.33 
                 n_modes = 1
-                gnm.calcModes(n_modes='all')
-                fv = calcFractVariance(gnm)   
-                cumulative_variances = np.cumsum(fv)
-                n_modes = np.argmax(cumulative_variances >= cumin) + 1
-                cuvar = cumulative_variances[n_modes - 1]
+                fv = calcFractVariance(gnm)        
+                cuvar = sum(fv[:n_modes])
+
+                while cuvar < cumin:
+                    n_modes += 1
+                    cuvar = sum(fv[:n_modes])
                 LOGGER.info(f"Auto-selected {n_modes} modes for {cumin} cumulative variance.")
-            
-            else:
-                gnm.calcModes(n_modes=n_modes)
-                LOGGER.info(f"Using {n_modes} modes.")
-            
+
             vecs = gnm[:n_modes].getEigvecs()
     else:
         ### Use all provided modes for Hinge detection ###
@@ -711,7 +714,7 @@ def getHinges(gnm, n_modes=None, threshold=15, space=None, trim=False):
     def detectHinges(v, threshold):
         """Detect hinge-like regions within single eigenvector."""
         
-        crx = np.nonzero(np.diff(np.sign(v)))[0] 
+        crx = np.where(np.diff(np.sign(v)) != 0)[0] 
         band = np.sqrt(1 / len(v)) / threshold
         regs = []
 
@@ -750,8 +753,7 @@ def getHinges(gnm, n_modes=None, threshold=15, space=None, trim=False):
         
         for reg in merged:
             if len(reg) <= p // 10:
-                #if v[reg[0] - 1] * v[reg[-1] + 1] > 0:
-                if v[reg[0] - 1] * v[reg[-1]] > 0:
+                if v[reg[0] - 1] * v[reg[-1] + 1] > 0:
                     continue
             
             if len(reg) >= s + 5:
@@ -763,7 +765,7 @@ def getHinges(gnm, n_modes=None, threshold=15, space=None, trim=False):
                 smv = np.argsort(av)[:1] 
                 fil.extend(reg[i] for i in smv)
 
-        return [int(x) for x in fil]
+        return fil
 
     ### Detect hinges for each mode ###
     n_hinges = []
