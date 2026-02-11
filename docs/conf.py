@@ -1,33 +1,56 @@
+import os
+import sys
 import sphinx_rtd_theme
 
-install_requires=[
-    'numpy',
-    'scipy',
-    'matplotlib',
-    'pyparsing',
-    'biopython',
-    'requests', # if you use it
-],
+# --- CRITICAL: PATH SETUP ---------------------------------------------------
+# This tells Sphinx where to find the 'prody' source code.
+# Without this, Autodoc fails, and your code docs (and search) will be empty.
+sys.path.insert(0, os.path.abspath('..')) 
+# ----------------------------------------------------------------------------
 
-html_theme = 'sphinx_rtd_theme'
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+# -- Project Information -----------------------------------------------------
+project = 'ProDy'
+copyright = '2010-2026, Bahar Lab'
+author = 'Bahar Lab'
+
+# -- General Configuration ---------------------------------------------------
 
 extensions = [
-    'sphinx.ext.autodoc',      # Reads your Python code
-    'sphinx.ext.autosummary',  # Generates summary tables
+    'sphinx.ext.autodoc',       # Reads your Python code
+    'sphinx.ext.autosummary',   # Generates summary tables
     'sphinx.ext.doctest',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',      # Renders math equations
-    'sphinx.ext.viewcode',     # Adds links to source code
-    'sphinx.ext.napoleon',     # <--- CRITICAL: Parses NumPy/Scientific docstrings
-    # 'sphinx.ext.intersphinx', # Optional: links to python docs
-    'sphinx_rtd_theme',    # Ensure this is in the list too!
-    'sphinxcontrib.jquery', # <--- ADD THIS
-
+    'sphinx.ext.mathjax',       # Renders math equations
+    'sphinx.ext.viewcode',      # Adds links to source code
+    'sphinx.ext.napoleon',      # Parses NumPy/Scientific docstrings
+    'sphinx_rtd_theme',         # The theme extension
+    'sphinxcontrib.jquery',     # Fixes the search bar crash
 ]
 
-# Napoleon settings (to handle ProDy's scientific docstrings)
+# -- Theme Settings ----------------------------------------------------------
+
+# The theme to use for HTML and HTML Help pages.
+html_theme = 'sphinx_rtd_theme'
+
+# 1. PATH TO YOUR LOGO (Relative to the 'docs' folder)
+html_logo = "_static/logo.png"
+
+# 2. THEME OPTIONS
+html_theme_options = {
+    'logo_only': True,        # Set to True if you want to hide the text "ProDy" entirely
+    # 'logo_only': False,       # Set to False if you want Logo + Text
+    'display_version': True,  # Show the version number (e.g., v2.5) below the logo
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'navigation_depth': 4,
+}
+
+# Ensure this is set so Sphinx looks in the _static folder
+html_static_path = ['_static']
+
+
+# -- Napoleon Settings (for ProDy docstrings) --------------------------------
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = False
