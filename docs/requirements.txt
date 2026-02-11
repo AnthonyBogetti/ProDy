@@ -1,6 +1,6 @@
 # Documentation tools
-sphinx>=5.0.0
-sphinx-rtd-theme>=1.0.0
+sphinx
+sphinx_rtd_theme
 
 # Dependencies required to import your package
 ProDy

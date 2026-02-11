@@ -1,8 +1,11 @@
-ProDy Documentation
+ProDy API Reference
 ===================
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference:
 
-   source/modules
+.. autosummary::
+   :toctree: _autosummary
+   :recursive:
+
+   prody

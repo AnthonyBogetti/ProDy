@@ -16,6 +16,8 @@ autodoc_default_options = {
     'show-inheritance': True,
 }
 
+autosummary_generate = True
+
 # This ensures that when you search "parsePDB", 
 # the search bar finds the exact function, not just the file it's in.
 add_module_names = False 
