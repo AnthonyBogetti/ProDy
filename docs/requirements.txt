@@ -1,6 +1,8 @@
-sphinx
-sphinx-rtd-theme
-sphinxcontrib-jquery
+# Documentation tools
+sphinx>=5.0.0
+sphinx-rtd-theme>=1.0.0
+
+# Dependencies required to import your package
+ProDy
 numpy
 scipy
-prody

@@ -2,7 +2,7 @@ ProDy Documentation
 ===================
 
 .. image:: _static/logo.png
-   :width: 200px
+   :width: 2000px
    :align: center
    :alt: ProDy Logo
 
@@ -10,7 +10,7 @@ Welcome to the ProDy documentation.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Main Contents
+   :caption: Contents
 
 Reference
 =========

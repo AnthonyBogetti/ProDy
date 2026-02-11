@@ -1,47 +1,73 @@
+# Configuration file for the Sphinx documentation builder.
 import os
 import sys
-import sphinx_rtd_theme
 
-# 1. Path Setup
+# -- Path setup --------------------------------------------------------------
+
+# If extensions (or modules to document with autodoc) are in another directory,
+# add these directories to sys.path here. If the directory is relative to the
+# documentation root, use os.path.abspath to make it absolute, like shown here.
+# Assuming your project structure is:
+# my_project/
+#   docs/
+#     conf.py
+#   my_package/
+#     __init__.py
+
 sys.path.insert(0, os.path.abspath('..'))
 
-# 2. Project Info
-project = 'ProDy'
-copyright = '2010-2026, Bahar Lab'
-author = 'Bahar Lab'
 
-# 3. Extensions
+# -- Project information -----------------------------------------------------
+
+project = 'ProDy'
+copyright = '2010-2026, Bahar Group'
+author = 'Bahar Group'
+release = '6.1.0'
+
+
+# -- General configuration ---------------------------------------------------
+
+# Add any Sphinx extension module names here, as strings.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',
-    'sphinx_rtd_theme',
-    'sphinxcontrib.jquery',
+    'sphinx.ext.autodoc',      # Core library for html generation from docstrings
+    'sphinx.ext.napoleon',     # Support for NumPy and Google style docstrings
+    'sphinx.ext.viewcode',     # Add links to highlighted source code
+    'sphinx.ext.mathjax',      # Render math equations
+    'sphinx.ext.intersphinx',  # Link to other project's documentation (like ProDy's)
 ]
 
-# 4. CRITICAL FIX: Force Sphinx to document imported functions (like parsePDB)
-autodoc_default_options = {
-    'members': True,
-    'undoc-members': True,
-    'imported-members': True,  # Shows functions imported from other files
-    'show-inheritance': True,
+# Napoleon settings (optional but recommended for scientific code)
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = False
+napoleon_include_private_with_doc = False
+
+# Intersphinx mapping to link to ProDy and Python docs
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'prody': ('http://prody.csb.pitt.edu/manual/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
 }
 
-# 5. CRITICAL FIX: Mock C-extensions so build doesn't crash
-autodoc_mock_imports = [
-    'prody.proteins.c_prody',
-    'prody.dynamics.rtbtools',
-    'prody.sequence.c_sequence',
-    'prody.kdtree',
-    'prody.lib',
-    'Bio', 'scipy', 'matplotlib', 'requests', 'numpy'
-]
+# Add any paths that contain templates here, relative to this directory.
+templates_path = ['_templates']
 
-# 6. Theme & Logo
+# List of patterns, relative to source directory, that match files and
+# directories to ignore when looking for source files.
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+
+
+# -- Options for HTML output -------------------------------------------------
+
+# The theme to use for HTML and HTML Help pages.
 html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']   # Tells Sphinx to look in docs/_static/
+
+# Add any paths that contain custom static files (such as style sheets) here,
+# relative to this directory.
+html_static_path = ['_static']
 html_logo = "_static/logo.png"   # path relative to docs/
 
-# 7. Speed up build
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**/tests']
+# -- Mocking (Optional) ------------------------------------------------------
+# If your build fails because it can't compile ProDy or Scipy on the server,
+# uncomment the following lines to mock them. This fakes the import.
+# autodoc_mock_imports = ["prody", "numpy", "scipy"]
