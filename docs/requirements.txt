@@ -1,7 +1,6 @@
-Sphinx>=7.0.0
-sphinx_rtd_theme>=2.0.0
+sphinx
+sphinx-rtd-theme
 sphinxcontrib-jquery
 numpy
 scipy
-matplotlib
-ipython
+prody

@@ -1,39 +1,32 @@
-************
-ProDy Manual
-************
+ProDy Documentation
+===================
 
-.. only:: not rtd and html
+.. image:: _static/logo.png
+   :width: 200px
+   :align: center
+   :alt: ProDy Logo
 
-    Welcome to the official ProDy documentation. You can read
-    these pages in `PDF <ProDy.pdf>`_ format too.
-
-
-.. only:: rtd and html
-
-    This is a partial copy of ProDy documentation.  Please visit
-    `ProDy Homepage <http://www.bahargroup.org/prody>`_ for complete
-    documentation with tutorials.
-
+Welcome to the ProDy documentation.
 
 .. toctree::
    :maxdepth: 2
-   :glob:
+   :caption: Main Contents
 
-   getprody
-   apps/index
-   reference/index
-   devel/index
-   release/index
-   about/index
+Reference
+=========
 
-.. only:: html
+Proteins Module
+---------------
+.. automodule:: prody.proteins
+   :members:
+   :imported-members:
 
-   * :ref:`genindex`
-   * :ref:`modindex`
-   * :ref:`search`
+Dynamics Module
+---------------
+.. automodule:: prody.dynamics
+   :members:
 
-
-.. only:: html
-
-   :Release: |release|
-   :Date: |today|
+Trajectory Module
+-----------------
+.. automodule:: prody.trajectory
+   :members:
