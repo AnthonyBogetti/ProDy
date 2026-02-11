@@ -15,6 +15,11 @@ from setuptools import Extension, setup
 # listed in `build-system.requires` in pyproject.toml.
 import numpy
 
+if os.environ.get("READTHEDOCS") == "True":
+    EXT_MODULES = []
+else:
+    EXT_MODULES = [...]
+
 # --- Logic to copy pre-compiled .so file ---
 # Note: Distributing pre-compiled binaries like this is not standard practice.
 # It would be better to compile this from source as part of the build.

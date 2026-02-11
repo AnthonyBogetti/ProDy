@@ -93,3 +93,10 @@ include = ["prody*"]
 # Tells setuptools how to find the project's version dynamically.
 version = { attr = "prody.__version__" }
 
+[project.optional-dependencies]
+docs = [
+    "numpy>=1.20",
+    "scipy",
+    "sphinx",
+    "sphinx-rtd-theme"
+]
