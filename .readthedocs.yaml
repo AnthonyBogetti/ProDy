@@ -1,7 +1,3 @@
-# .readthedocs.yaml
-# Read the Docs configuration file
-# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
-
 version: 2
 
 build:
@@ -9,14 +5,20 @@ build:
   tools:
     python: "3.12"
   jobs:
+    post_create_environment:
+      # Install your package first so autosummary can import it
+      - pip install -e .
+      - pip install -r docs/requirements.txt
     pre_build:
+      # Clean out any old failed attempts
       - rm -rf docs/generated/ docs/_build/
+      # We use this to "kickstart" the rst files if index.rst isn't enough
+      - sphinx-autogen -o docs/generated docs/*.rst
 
 sphinx:
-   configuration: docs/conf.py
+  configuration: docs/conf.py
 
 python:
-   install:
-   - requirements: docs/requirements.txt
-   - method: pip
-     path: .
+  install:
+    - method: pip
+      path: .

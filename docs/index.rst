@@ -8,9 +8,14 @@ ProDy Documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference
+   :caption: Contents:
+
+.. rubric:: API Reference
 
 .. autosummary::
    :toctree: generated
-   :template: function.rst
    :recursive:
+   :template: autosummary/function.rst
+   :nosignatures:
+
+   prody

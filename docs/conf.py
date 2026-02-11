@@ -85,6 +85,9 @@ html_theme_options = {
 html_static_path = ['_static']
 html_logo = "_static/logo.png"   # path relative to docs/
 
+def setup(app):
+    app.add_css_file('custom.css')
+
 # -- Mocking (Optional) ------------------------------------------------------
 # If your build fails because it can't compile ProDy or Scipy on the server,
 # uncomment the following lines to mock them. This fakes the import.
