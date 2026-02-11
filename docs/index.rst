@@ -10,4 +10,7 @@ ProDy Documentation
    :maxdepth: 2
    :caption: API Reference
 
-   source/modules
+.. autosummary::
+   :toctree: generated
+   :template: function.rst
+   :recursive:

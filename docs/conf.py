@@ -16,13 +16,17 @@ import sys
 
 sys.path.insert(0, os.path.abspath('..'))
 
+import prody
+
+version = prody.__version__
+release = prody.__version__
+
 
 # -- Project information -----------------------------------------------------
 
 project = 'ProDy'
 copyright = '2010-2026, Bahar Group'
 author = 'Bahar Group'
-release = '6.1.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -30,6 +34,7 @@ release = '6.1.0'
 # Add any Sphinx extension module names here, as strings.
 extensions = [
     'sphinx.ext.autodoc',      # Core library for html generation from docstrings
+    'sphinx.ext.autosummary', # This is the key for individual pages
     'sphinx.ext.napoleon',     # Support for NumPy and Google style docstrings
     'sphinx.ext.viewcode',     # Add links to highlighted source code
     'sphinx.ext.mathjax',      # Render math equations
@@ -43,6 +48,14 @@ napoleon_include_private_with_doc = False
 
 add_module_names = True
 
+autosummary_generate = True
+
+autodoc_default_options = {
+    'members': True,
+    'inherited-members': True,
+    'show-inheritance:': True,
+}
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -54,6 +67,18 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # The theme to use for HTML and HTML Help pages.
 html_theme = 'sphinx_rtd_theme'
+
+html_theme_options = {
+    # This ensures the logo is shown in the sidebar
+    'logo_only': True,
+    'display_version': True,
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'navigation_depth': 4,
+    'includehidden': True,
+    'titles_only': False
+}
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory.
