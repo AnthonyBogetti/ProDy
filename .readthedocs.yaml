@@ -5,15 +5,9 @@ build:
   tools:
     python: "3.12"
   jobs:
-    post_create_environment:
-      # Install your package first so autosummary can import it
-      - pip install -e .
-      - pip install -r docs/requirements.txt
     pre_build:
-      # Clean out any old failed attempts
-      - rm -rf docs/generated/ docs/_build/
-      # We use this to "kickstart" the rst files if index.rst isn't enough
-      - sphinx-autogen -o docs/generated docs/*.rst
+      - rm -rf docs/source/ docs/_build/
+      - sphinx-apidoc -o docs/source/ prody --separate --force --module-first --no-toc
 
 sphinx:
   configuration: docs/conf.py
@@ -22,3 +16,5 @@ python:
   install:
     - method: pip
       path: .
+      extra_requirements:
+        - docs
