@@ -33,7 +33,6 @@ extensions = [
     'sphinx.ext.napoleon',     # Support for NumPy and Google style docstrings
     'sphinx.ext.viewcode',     # Add links to highlighted source code
     'sphinx.ext.mathjax',      # Render math equations
-    'sphinx.ext.intersphinx',  # Link to other project's documentation (like ProDy's)
 ]
 
 # Napoleon settings (optional but recommended for scientific code)
@@ -42,12 +41,7 @@ napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = False
 napoleon_include_private_with_doc = False
 
-# Intersphinx mapping to link to ProDy and Python docs
-intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'prody': ('http://prody.csb.pitt.edu/manual/', None),
-    'numpy': ('https://numpy.org/doc/stable/', None),
-}
+add_module_names = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -55,7 +49,6 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
-
 
 # -- Options for HTML output -------------------------------------------------
 
