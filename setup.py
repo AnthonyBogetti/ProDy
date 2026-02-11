@@ -15,10 +15,10 @@ from setuptools import Extension, setup
 # listed in `build-system.requires` in pyproject.toml.
 import numpy
 
-if os.environ.get("READTHEDOCS") == "True":
-    EXT_MODULES = []
-else:
-    EXT_MODULES = [...]
+
+
+
+
 
 # --- Logic to copy pre-compiled .so file ---
 # Note: Distributing pre-compiled binaries like this is not standard practice.
@@ -81,6 +81,11 @@ CONTRIBUTED = [
 for ext in CONTRIBUTED:
     if all(isfile(src) for src in ext.sources):
         EXTENSIONS.append(ext)
+
+if os.environ.get("READTHEDOCS") == "True":
+    EXTENSIONS = []
+else:
+    EXTENSIONS = [...]
 
 # --- Setup call ---
 # This call is now minimal. It only provides the extension modules to setuptools.
