@@ -4,16 +4,13 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.11"
-  jobs:
-    pre_build:
-      # Clear out old failed attempts and ghost files
-      - rm -rf docs/_autosummary/ docs/_build/
 
 sphinx:
   configuration: docs/conf.py
 
 python:
   install:
-    - requirements: docs/requirements.txt
     - method: pip
       path: .
+    - requirements: docs/requirements.txt
+

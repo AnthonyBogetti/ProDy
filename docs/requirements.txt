@@ -1,8 +1,4 @@
-# Documentation tools
 sphinx
-sphinx_rtd_theme
-
-# Dependencies required to import your package
-ProDy
+sphinx-rtd-theme
 numpy
 scipy

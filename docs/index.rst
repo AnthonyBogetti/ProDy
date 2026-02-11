@@ -1,11 +1,11 @@
-ProDy API Reference
-===================
+Welcome to ProDy's Documentation
+======================================
 
 .. toctree::
    :maxdepth: 2
+   :caption: Contents:
 
-.. autosummary::
-   :toctree: _autosummary
-   :recursive:
+   installation
+   usage
+   api
 
-   prody
