@@ -4,19 +4,19 @@
 
 version: 2
 
-# Set the OS to a standard, recent version
 build:
   os: ubuntu-22.04
   tools:
     python: "3.12"
+  jobs:
+    pre_build:
+      - sphinx-apidoc -o docs/source my_package --force
 
-# Build documentation in the docs/ directory with Sphinx
 sphinx:
    configuration: docs/conf.py
 
-# Explicitly install the package and requirements
 python:
    install:
-   - requirements: docs/requirements.txt  # Installs sphinx, prody, numpy
+   - requirements: docs/requirements.txt
    - method: pip
-     path: .                              # Installs YOUR package (so autodoc can find it)
+     path: .
